@@ -142,6 +142,52 @@ export async function deleteLetter(id: number): Promise<void> {
   await db.delete(letters).where(eq(letters.id, id));
 }
 
+export async function getLetterByShareToken(shareToken: string): Promise<Letter | undefined> {
+  const db = await getDb();
+  if (!db) {
+    return undefined;
+  }
+
+  const result = await db.select().from(letters).where(eq(letters.shareToken, shareToken)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateLetterShareToken(id: number, shareToken: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(letters).set({ shareToken }).where(eq(letters.id, id));
+}
+
+export async function incrementViewCount(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const letter = await getLetterById(id);
+  if (letter) {
+    await db.update(letters).set({ 
+      viewCount: letter.viewCount + 1,
+      lastViewedAt: new Date()
+    }).where(eq(letters.id, id));
+  }
+}
+
+export async function unlockLetter(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(letters).set({ 
+    isUnlocked: true,
+    unlockedAt: new Date()
+  }).where(eq(letters.id, id));
+}
+
 // ============================================
 // Template Queries
 // ============================================

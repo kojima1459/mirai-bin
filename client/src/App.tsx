@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import CreateLetter from "./pages/CreateLetter";
 import MyLetters from "./pages/MyLetters";
+import ShareLetter from "./pages/ShareLetter";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/create"} component={CreateLetter} />
       <Route path={"/my-letters"} component={MyLetters} />
+      <Route path={"/share/:token"} component={ShareLetter} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

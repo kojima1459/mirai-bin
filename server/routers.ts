@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -117,6 +117,109 @@ export const appRouter = router({
         
         await deleteLetter(input.id);
         return { success: true };
+      }),
+
+    // 共有リンク生成
+    generateShareLink: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.id);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        // 既に共有トークンがあればそれを返す
+        if (letter.shareToken) {
+          return { shareToken: letter.shareToken };
+        }
+        
+        // 新しい共有トークンを生成
+        const shareToken = nanoid(21);
+        await updateLetterShareToken(input.id, shareToken);
+        
+        return { shareToken };
+      }),
+
+    // 共有リンクから手紙を取得（公開エンドポイント）
+    getByShareToken: publicProcedure
+      .input(z.object({ 
+        shareToken: z.string(),
+        userAgent: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        // Bot検出
+        const botPatterns = [
+          /bot/i, /crawler/i, /spider/i, /slurp/i, /facebook/i, 
+          /twitter/i, /linkedin/i, /pinterest/i, /telegram/i,
+          /whatsapp/i, /discord/i, /slack/i, /preview/i,
+          /googlebot/i, /bingbot/i, /yandex/i, /baidu/i,
+          /duckduck/i, /sogou/i, /exabot/i, /facebot/i,
+          /ia_archiver/i, /mj12bot/i, /semrush/i, /ahref/i,
+          /curl/i, /wget/i, /python/i, /java/i, /php/i,
+          /headless/i, /phantom/i, /selenium/i, /puppeteer/i,
+        ];
+        
+        const userAgent = input.userAgent || "";
+        const isBot = botPatterns.some(pattern => pattern.test(userAgent));
+        
+        if (isBot) {
+          // BotにはOGP用の最小限の情報のみ返す
+          return {
+            isBot: true,
+            title: "未来便 - 大切な人への手紙",
+            description: "未来の特別な日に届く手紙があなたを待っています。",
+          };
+        }
+        
+        const letter = await getLetterByShareToken(input.shareToken);
+        if (!letter) {
+          return { error: "not_found" };
+        }
+        
+        // キャンセルされた手紙は表示しない
+        if (letter.status === "canceled") {
+          return { error: "canceled" };
+        }
+        
+        // 開封日時チェック
+        const now = new Date();
+        const unlockAt = letter.unlockAt ? new Date(letter.unlockAt) : null;
+        const canUnlock = !unlockAt || now >= unlockAt;
+        
+        // 閲覧数をインクリメント
+        await incrementViewCount(letter.id);
+        
+        if (!canUnlock) {
+          // まだ開封できない
+          return {
+            isBot: false,
+            canUnlock: false,
+            unlockAt: unlockAt?.toISOString(),
+            recipientName: letter.recipientName,
+            templateUsed: letter.templateUsed,
+          };
+        }
+        
+        // 開封可能
+        // 初回開封時にステータスを更新
+        if (!letter.isUnlocked) {
+          await unlockLetter(letter.id);
+        }
+        
+        return {
+          isBot: false,
+          canUnlock: true,
+          letter: {
+            id: letter.id,
+            recipientName: letter.recipientName,
+            templateUsed: letter.templateUsed,
+            finalContent: letter.finalContent,
+            encryptionIv: letter.encryptionIv,
+            ciphertextUrl: letter.ciphertextUrl,
+            createdAt: letter.createdAt.toISOString(),
+            unlockAt: unlockAt?.toISOString(),
+            unlockedAt: letter.unlockedAt?.toISOString(),
+          },
+        };
       }),
   }),
 

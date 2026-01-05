@@ -52,11 +52,16 @@ export const letters = mysqlTable("letters", {
   txHash: varchar("txHash", { length: 66 }),
   proofCreatedAt: timestamp("proofCreatedAt"),
   
-  // 解錠関連（Day 4で実装）
+  // 開封関連
   unlockAt: timestamp("unlockAt"),
   unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
   isUnlocked: boolean("isUnlocked").default(false).notNull(),
   unlockedAt: timestamp("unlockedAt"),
+  
+  // 共有リンク関連
+  shareToken: varchar("shareToken", { length: 64 }).unique(),
+  viewCount: int("viewCount").default(0).notNull(),
+  lastViewedAt: timestamp("lastViewedAt"),
   
   // 鍵管理（Day 4で実装）
   keyShard1: text("keyShard1"),

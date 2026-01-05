@@ -15,6 +15,13 @@
       "when": 1767628408714,
       "tag": "0001_glorious_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1767629245020,
+      "tag": "0002_messy_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

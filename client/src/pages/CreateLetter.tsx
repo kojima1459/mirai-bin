@@ -23,8 +23,16 @@ import {
   Mic, 
   Square, 
   Check,
-  Lock
+  Lock,
+  Calendar,
+  Share2,
+  Copy,
+  ExternalLink
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 import { toast } from "sonner";
 
 type Step = "template" | "recording" | "transcribing" | "generating" | "editing" | "encrypting" | "complete";
@@ -54,6 +62,10 @@ export default function CreateLetter() {
   const [finalContent, setFinalContent] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [letterId, setLetterId] = useState<number | null>(null);
+  const [unlockDate, setUnlockDate] = useState<Date | undefined>(undefined);
+  const [unlockTime, setUnlockTime] = useState("09:00");
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Hooks
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
@@ -66,6 +78,7 @@ export default function CreateLetter() {
   const generateDraftMutation = trpc.ai.generateDraft.useMutation();
   const uploadCiphertextMutation = trpc.storage.uploadCiphertext.useMutation();
   const createLetterMutation = trpc.letter.create.useMutation();
+  const generateShareLinkMutation = trpc.letter.generateShareLink.useMutation();
 
   // 認証チェック
   useEffect(() => {
@@ -123,6 +136,42 @@ export default function CreateLetter() {
     }
   };
 
+  // 開封日時を計算
+  const getUnlockAt = (): Date | undefined => {
+    if (!unlockDate) return undefined;
+    const [hours, minutes] = unlockTime.split(":").map(Number);
+    const date = new Date(unlockDate);
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  };
+
+  // 共有リンクを生成
+  const handleGenerateShareLink = async () => {
+    if (!letterId) return;
+    
+    try {
+      const result = await generateShareLinkMutation.mutateAsync({ id: letterId });
+      setShareToken(result.shareToken);
+      const url = `${window.location.origin}/share/${result.shareToken}`;
+      setShareUrl(url);
+      toast.success("共有リンクを生成しました");
+    } catch (err) {
+      console.error("Error:", err);
+      toast.error("共有リンクの生成に失敗しました");
+    }
+  };
+
+  // クリップボードにコピー
+  const handleCopyShareUrl = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("コピーしました");
+    } catch (err) {
+      toast.error("コピーに失敗しました");
+    }
+  };
+
   // 保存（暗号化 → アップロード → DB保存）
   const handleSave = async () => {
     if (!finalContent.trim()) {
@@ -144,6 +193,9 @@ export default function CreateLetter() {
         ciphertextBase64: encryptResult.encryption.ciphertext,
       });
 
+      // 開封日時を取得
+      const unlockAt = getUnlockAt();
+
       // DB保存
       const letterResult = await createLetterMutation.mutateAsync({
         recipientName: recipientName || undefined,
@@ -157,6 +209,7 @@ export default function CreateLetter() {
         encryptionIv: encryptResult.encryption.iv,
         ciphertextUrl: uploadResult.url,
         proofHash: encryptResult.proof.hash,
+        unlockAt: unlockAt,
       });
 
       setLetterId(letterResult.id);
@@ -429,6 +482,69 @@ export default function CreateLetter() {
                 />
               </div>
 
+              {/* 開封日時設定 */}
+              <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  <Label className="text-base font-medium">開封日時を設定（任意）</Label>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  指定した日時まで手紙を開封できないようにします
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <div className="space-y-2">
+                    <Label>日付</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {unlockDate ? format(unlockDate, "yyyy年M月d日", { locale: ja }) : "日付を選択"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={unlockDate}
+                          onSelect={setUnlockDate}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>時刻</Label>
+                    <Select value={unlockTime} onValueChange={setUnlockTime}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <SelectItem key={i} value={`${i.toString().padStart(2, "0")}:00`}>
+                            {i.toString().padStart(2, "0")}:00
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {unlockDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setUnlockDate(undefined)}
+                      className="self-end text-muted-foreground"
+                    >
+                      クリア
+                    </Button>
+                  )}
+                </div>
+                {unlockDate && (
+                  <div className="text-sm text-primary font-medium">
+                    {format(unlockDate, "yyyy年M月d日", { locale: ja })} {unlockTime} に開封可能になります
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3">
                 <Button
                   variant="outline"
@@ -489,6 +605,14 @@ export default function CreateLetter() {
                     <span className="text-muted-foreground">テンプレート</span>
                     <span>{selectedTemplateData?.displayName}</span>
                   </div>
+                  {unlockDate && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">開封日時</span>
+                      <span className="text-amber-600">
+                        {format(unlockDate, "yyyy年M月d日", { locale: ja })} {unlockTime}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">暗号化</span>
                     <span className="text-green-600">AES-256-GCM</span>
@@ -497,6 +621,54 @@ export default function CreateLetter() {
                     <span className="text-muted-foreground">証跡</span>
                     <span className="text-green-600">SHA-256</span>
                   </div>
+                </div>
+
+                {/* 共有リンクセクション */}
+                <div className="space-y-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="flex items-center justify-center gap-2 text-primary">
+                    <Share2 className="h-5 w-5" />
+                    <span className="font-medium">手紙を共有する</span>
+                  </div>
+                  
+                  {!shareUrl ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        共有リンクを生成して、大切な人に手紙を届けましょう
+                      </p>
+                      <Button
+                        onClick={handleGenerateShareLink}
+                        disabled={generateShareLinkMutation.isPending}
+                        className="w-full"
+                      >
+                        {generateShareLinkMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Share2 className="mr-2 h-4 w-4" />
+                        )}
+                        共有リンクを生成
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={shareUrl}
+                          readOnly
+                          className="text-sm bg-background"
+                        />
+                        <Button size="icon" variant="outline" onClick={handleCopyShareUrl}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="outline" onClick={() => window.open(shareUrl, "_blank")}>
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        このリンクを大切な人に送ってください
+                        {unlockDate && "。開封日時までは内容を見ることができません"}
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
@@ -515,6 +687,10 @@ export default function CreateLetter() {
                       setFinalContent("");
                       setAudioUrl("");
                       setLetterId(null);
+                      setUnlockDate(undefined);
+                      setUnlockTime("09:00");
+                      setShareToken(null);
+                      setShareUrl(null);
                       resetRecording();
                       resetEncryption();
                     }}
