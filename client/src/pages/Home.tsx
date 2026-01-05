@@ -1,15 +1,54 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
-import { Cake, GraduationCap, Heart, Mail, Loader2, PenLine } from "lucide-react";
+import { 
+  Cake, GraduationCap, Heart, Mail, Loader2, PenLine, 
+  School, BookOpen, Star, Briefcase, Baby, HandHeart 
+} from "lucide-react";
 import { Link } from "wouter";
 
 const iconMap: Record<string, React.ReactNode> = {
   cake: <Cake className="h-8 w-8" />,
   "graduation-cap": <GraduationCap className="h-8 w-8" />,
   heart: <Heart className="h-8 w-8" />,
+  school: <School className="h-8 w-8" />,
+  "book-open": <BookOpen className="h-8 w-8" />,
+  star: <Star className="h-8 w-8" />,
+  briefcase: <Briefcase className="h-8 w-8" />,
+  baby: <Baby className="h-8 w-8" />,
+  "hand-heart": <HandHeart className="h-8 w-8" />,
+  mail: <Mail className="h-8 w-8" />,
+};
+
+// テンプレートをカテゴリ別に分類
+const templateCategories: Record<string, { title: string; templates: string[] }> = {
+  childhood: {
+    title: "幼少期〜小学校",
+    templates: ["10years", "elementary-graduation"],
+  },
+  junior: {
+    title: "中学校",
+    templates: ["junior-high-entrance", "junior-high-graduation"],
+  },
+  senior: {
+    title: "高校〜大学",
+    templates: ["high-school-entrance", "high-school-graduation", "university-entrance"],
+  },
+  adult: {
+    title: "成人〜社会人",
+    templates: ["coming-of-age", "first-job"],
+  },
+  life: {
+    title: "人生の節目",
+    templates: ["first-love", "wedding-day", "becoming-parent"],
+  },
+  special: {
+    title: "特別な日",
+    templates: ["difficult-times", "someday"],
+  },
 };
 
 export default function Home() {
@@ -23,6 +62,14 @@ export default function Home() {
       </div>
     );
   }
+
+  // テンプレートをカテゴリ別にグループ化
+  const getTemplatesByCategory = (categoryKey: string) => {
+    if (!templates) return [];
+    const category = templateCategories[categoryKey];
+    if (!category) return [];
+    return templates.filter(t => category.templates.includes(t.name));
+  };
 
   return (
     <div className="min-h-screen">
@@ -90,7 +137,7 @@ export default function Home() {
           </h2>
           <div className="grid md:grid-cols-4 gap-8 max-w-4xl mx-auto">
             {[
-              { step: "1", title: "テンプレートを選ぶ", desc: "シーンに合わせた3種類" },
+              { step: "1", title: "テンプレートを選ぶ", desc: "人生の節目に合わせて" },
               { step: "2", title: "90秒で話す", desc: "思いつくままに" },
               { step: "3", title: "AIが手紙に", desc: "温かい文章に変換" },
               { step: "4", title: "暗号化して保存", desc: "安全に未来へ届ける" },
@@ -113,8 +160,13 @@ export default function Home() {
           <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
             テンプレート
           </h2>
-          <p className="text-center text-muted-foreground mb-12">
-            大切な瞬間に届ける、3つのシーン
+          <p className="text-center text-muted-foreground mb-8">
+            子どもの人生の節目に届ける、親からの想い
+          </p>
+          <p className="text-center text-sm text-muted-foreground mb-12 max-w-2xl mx-auto">
+            たとえ自分がいなくなっても、大切な想いは確実に届きます。
+            <br />
+            子どもの成長の節目に、あなたの言葉を届けましょう。
           </p>
           
           {templatesLoading ? (
@@ -122,37 +174,86 @@ export default function Home() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              {templates?.map((template) => (
-                <Card key={template.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader className="text-center">
-                    <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
-                      {iconMap[template.icon || ""] || <Mail className="h-8 w-8" />}
-                    </div>
-                    <CardTitle>{template.displayName}</CardTitle>
-                    <CardDescription>{template.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-center">
-                    <p className="text-sm text-muted-foreground italic mb-4">
-                      「{template.exampleOneLiner}」
-                    </p>
-                    {isAuthenticated ? (
-                      <Link href={`/create?template=${template.name}`}>
-                        <Button variant="outline" className="w-full">
-                          このテンプレートで書く
-                        </Button>
-                      </Link>
-                    ) : (
-                      <a href={getLoginUrl()}>
-                        <Button variant="outline" className="w-full">
-                          ログインして書く
-                        </Button>
-                      </a>
-                    )}
-                  </CardContent>
-                </Card>
+            <Tabs defaultValue="childhood" className="max-w-6xl mx-auto">
+              <TabsList className="grid grid-cols-3 md:grid-cols-6 mb-8 h-auto">
+                {Object.entries(templateCategories).map(([key, category]) => (
+                  <TabsTrigger key={key} value={key} className="text-xs md:text-sm py-2">
+                    {category.title}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              
+              {Object.keys(templateCategories).map((categoryKey) => (
+                <TabsContent key={categoryKey} value={categoryKey}>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {getTemplatesByCategory(categoryKey).map((template) => (
+                      <Card key={template.id} className="hover:shadow-lg transition-shadow">
+                        <CardHeader className="text-center">
+                          <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+                            {iconMap[template.icon || ""] || <Mail className="h-8 w-8" />}
+                          </div>
+                          <CardTitle className="text-lg">{template.displayName}</CardTitle>
+                          <CardDescription>{template.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center">
+                          <p className="text-sm text-muted-foreground italic mb-4">
+                            「{template.exampleOneLiner}」
+                          </p>
+                          {isAuthenticated ? (
+                            <Link href={`/create?template=${template.name}`}>
+                              <Button variant="outline" className="w-full">
+                                このテンプレートで書く
+                              </Button>
+                            </Link>
+                          ) : (
+                            <a href={getLoginUrl()}>
+                              <Button variant="outline" className="w-full">
+                                ログインして書く
+                              </Button>
+                            </a>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </TabsContent>
               ))}
-            </div>
+            </Tabs>
+          )}
+        </div>
+      </section>
+
+      {/* メッセージセクション */}
+      <section className="py-16 bg-primary/5">
+        <div className="container max-w-3xl text-center">
+          <h2 className="text-2xl md:text-3xl font-bold mb-6">
+            想いは、時を超えて届く
+          </h2>
+          <p className="text-muted-foreground leading-relaxed mb-8">
+            子どもの成長を見届けられない日が来るかもしれない。
+            <br />
+            でも、あなたの想いは永遠に残ります。
+            <br />
+            <br />
+            10歳の誕生日に、卒業式の朝に、結婚する日に。
+            <br />
+            子どもが人生の節目を迎えるとき、
+            <br />
+            あなたの声が、あなたの言葉が、そばにいます。
+          </p>
+          {isAuthenticated ? (
+            <Link href="/create">
+              <Button size="lg">
+                <PenLine className="mr-2 h-5 w-5" />
+                想いを残す
+              </Button>
+            </Link>
+          ) : (
+            <a href={getLoginUrl()}>
+              <Button size="lg">
+                はじめる
+              </Button>
+            </a>
           )}
         </div>
       </section>

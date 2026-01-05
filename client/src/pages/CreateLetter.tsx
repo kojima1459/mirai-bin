@@ -27,7 +27,14 @@ import {
   Calendar,
   Share2,
   Copy,
-  ExternalLink
+  ExternalLink,
+  MessageCircle,
+  School,
+  BookOpen,
+  Star,
+  Briefcase,
+  Baby,
+  HandHeart
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -41,6 +48,13 @@ const iconMap: Record<string, React.ReactNode> = {
   cake: <Cake className="h-6 w-6" />,
   "graduation-cap": <GraduationCap className="h-6 w-6" />,
   heart: <Heart className="h-6 w-6" />,
+  school: <School className="h-6 w-6" />,
+  "book-open": <BookOpen className="h-6 w-6" />,
+  star: <Star className="h-6 w-6" />,
+  briefcase: <Briefcase className="h-6 w-6" />,
+  baby: <Baby className="h-6 w-6" />,
+  "hand-heart": <HandHeart className="h-6 w-6" />,
+  mail: <Mail className="h-6 w-6" />,
 };
 
 const MAX_DURATION = 90; // 90秒
@@ -663,6 +677,35 @@ export default function CreateLetter() {
                           <ExternalLink className="h-4 w-4" />
                         </Button>
                       </div>
+                      
+                      {/* LINE/メール共有ボタン */}
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 bg-[#06C755] hover:bg-[#05b34d] text-white border-0"
+                          onClick={() => {
+                            const text = `大切なあなたへの手紙が届いています。${unlockDate ? `\n開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}` : ""}`;
+                            const lineUrl = `https://line.me/R/share?text=${encodeURIComponent(text + "\n" + shareUrl)}`;
+                            window.open(lineUrl, "_blank");
+                          }}
+                        >
+                          <MessageCircle className="mr-2 h-4 w-4" />
+                          LINEで送る
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            const subject = `大切なあなたへの手紙`;
+                            const body = `大切なあなたへの手紙が届いています。\n\n${unlockDate ? `開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}\n\n` : ""}以下のリンクからご覧ください。\n${shareUrl}`;
+                            window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                          }}
+                        >
+                          <Mail className="mr-2 h-4 w-4" />
+                          メールで送る
+                        </Button>
+                      </div>
+                      
                       <p className="text-xs text-muted-foreground">
                         このリンクを大切な人に送ってください
                         {unlockDate && "。開封日時までは内容を見ることができません"}
