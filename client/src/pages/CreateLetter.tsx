@@ -13,6 +13,8 @@ import { formatDuration } from "@/lib/audio";
 import { getLoginUrl } from "@/const";
 import { useLocation, useSearch } from "wouter";
 import { useDraftAutoSave } from "@/hooks/useDraftAutoSave";
+import { splitKey } from "@/lib/shamir";
+import { wrapClientShare, generateUnlockCode } from "@/lib/crypto";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -35,7 +37,12 @@ import {
   Star,
   Briefcase,
   Baby,
-  HandHeart
+  HandHeart,
+  Key,
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Download
 } from "lucide-react";
 import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
 import { motion } from "framer-motion";
@@ -44,6 +51,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type Step = "template" | "recording" | "transcribing" | "generating" | "editing" | "encrypting" | "complete";
 
@@ -84,8 +92,13 @@ export default function CreateLetter() {
   const [unlockTime, setUnlockTime] = useState("09:00");
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
+  
+  // ゼロ知識設計: 解錠コードとバックアップシェア
+  const [unlockCode, setUnlockCode] = useState<string | null>(null);
+  const [backupShare, setBackupShare] = useState<string | null>(null);
+  const [showUnlockCode, setShowUnlockCode] = useState(false);
+  const [showBackupShare, setShowBackupShare] = useState(false);
 
   // Hooks
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
@@ -98,6 +111,7 @@ export default function CreateLetter() {
   const generateDraftMutation = trpc.ai.generateDraft.useMutation();
   const uploadCiphertextMutation = trpc.storage.uploadCiphertext.useMutation();
   const createLetterMutation = trpc.letter.create.useMutation();
+  const setUnlockEnvelopeMutation = trpc.letter.setUnlockEnvelope.useMutation();
   const generateShareLinkMutation = trpc.letter.generateShareLink.useMutation();
   const deleteDraftMutation = trpc.draft.delete.useMutation();
 
@@ -230,15 +244,15 @@ export default function CreateLetter() {
     return date;
   };
 
-  // 共有リンクを生成
+  // 共有リンクを生成（ゼロ知識版）
   const handleGenerateShareLink = async () => {
-    if (!letterId || !encryptionKey) return;
+    if (!letterId || !unlockCode) return;
     
     try {
       const result = await generateShareLinkMutation.mutateAsync({ id: letterId });
       setShareToken(result.shareToken);
-      // 復号キーをURLフラグメントに含める（サーバーには送信されない）
-      const url = `${window.location.origin}/share/${result.shareToken}#key=${encodeURIComponent(encryptionKey)}`;
+      // URLには秘密を含めない（#key廃止）
+      const url = `${window.location.origin}/share/${result.shareToken}`;
       setShareUrl(url);
       toast.success("共有リンクを生成しました");
     } catch (err) {
@@ -252,13 +266,35 @@ export default function CreateLetter() {
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("コピーしました");
+      toast.success("リンクをコピーしました");
     } catch (err) {
       toast.error("コピーに失敗しました");
     }
   };
 
-  // 保存（暗号化 → アップロード → DB保存）
+  // 解錠コードをコピー
+  const handleCopyUnlockCode = async () => {
+    if (!unlockCode) return;
+    try {
+      await navigator.clipboard.writeText(unlockCode);
+      toast.success("解錠コードをコピーしました");
+    } catch (err) {
+      toast.error("コピーに失敗しました");
+    }
+  };
+
+  // バックアップシェアをコピー
+  const handleCopyBackupShare = async () => {
+    if (!backupShare) return;
+    try {
+      await navigator.clipboard.writeText(backupShare);
+      toast.success("バックアップコードをコピーしました");
+    } catch (err) {
+      toast.error("コピーに失敗しました");
+    }
+  };
+
+  // 保存（ゼロ知識版：暗号化 → Shamir分割 → アップロード → DB保存）
   const handleSave = async () => {
     if (!finalContent.trim()) {
       toast.error("手紙の内容を入力してください");
@@ -268,40 +304,59 @@ export default function CreateLetter() {
     setStep("encrypting");
 
     try {
-      // 暗号化
+      // 1. 暗号化（クライアント側で完結）
       const encryptResult = await encrypt(finalContent);
       if (!encryptResult) {
         throw new Error("暗号化に失敗しました");
       }
 
-      // 暗号文をアップロード
+      // 2. 暗号文をアップロード
       const uploadResult = await uploadCiphertextMutation.mutateAsync({
         ciphertextBase64: encryptResult.encryption.ciphertext,
       });
 
+      // 3. Shamir分割（クライアント側で実行）
+      const shares = await splitKey(encryptResult.encryption.key);
+      
+      // 4. 解錠コードを生成
+      const code = generateUnlockCode(12);
+      setUnlockCode(code);
+      
+      // 5. clientShareを解錠コードで暗号化（封筒作成）
+      const envelope = await wrapClientShare(shares.clientShare, code);
+      
+      // 6. バックアップシェアを保存（ユーザーに提示）
+      setBackupShare(shares.backupShare);
+
       // 開封日時を取得
       const unlockAt = getUnlockAt();
 
-      // DB保存（Shamir分割のためencryptionKeyも送信）
+      // 7. DB保存（サーバーにはserverShareのみ送信、本文は送らない）
       const letterResult = await createLetterMutation.mutateAsync({
         recipientName: recipientName || undefined,
         recipientRelation: recipientRelation || undefined,
         audioUrl: audioUrl || undefined,
         audioDuration: elapsed,
-        transcription: transcription || undefined,
-        aiDraft: aiDraft || undefined,
-        finalContent: finalContent,
         templateUsed: selectedTemplate || undefined,
         encryptionIv: encryptResult.encryption.iv,
         ciphertextUrl: uploadResult.url,
         proofHash: encryptResult.proof.hash,
         unlockAt: unlockAt,
-        encryptionKey: encryptResult.encryption.key, // Shamir分割用
+        useShamir: true,
+        serverShare: shares.serverShare, // サーバーにはserverShareのみ
       });
 
       setLetterId(letterResult.id);
-      // clientShareを共有リンクに使用
-      setEncryptionKey(letterResult.clientShare);
+      
+      // 8. 封筒（暗号化されたclientShare）を保存
+      await setUnlockEnvelopeMutation.mutateAsync({
+        id: letterResult.id,
+        wrappedClientShare: envelope.wrappedClientShare,
+        wrappedClientShareIv: envelope.wrappedClientShareIv,
+        wrappedClientShareSalt: envelope.wrappedClientShareSalt,
+        wrappedClientShareKdf: envelope.wrappedClientShareKdf,
+        wrappedClientShareKdfIters: envelope.wrappedClientShareKdfIters,
+      });
       
       // 下書きを削除（正式保存したので）
       if (draftId) {
@@ -475,64 +530,61 @@ export default function CreateLetter() {
         {step === "recording" && (
           <Card>
             <CardHeader>
-              <CardTitle>90秒で想いを録音</CardTitle>
+              <CardTitle>想いを録音する</CardTitle>
               <CardDescription>
-                {selectedTemplateData?.recordingPrompt || "思いつくままに話してください"}
+                {selectedTemplateData?.recordingPrompt || "伝えたいことを自由に話してください"}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="text-center">
-                {/* タイマー */}
-                <motion.div 
-                  className="text-6xl font-mono font-bold mb-4"
-                  animate={isRecording && remaining <= 10 ? { scale: [1, 1.05, 1], color: ["inherit", "#ef4444", "inherit"] } : {}}
-                  transition={{ duration: 0.5, repeat: isRecording && remaining <= 10 ? Infinity : 0 }}
-                >
-                  {isRecording ? formatDuration(remaining) : formatDuration(MAX_DURATION)}
-                </motion.div>
-
-                {/* 波形アニメーション */}
-                <AudioWaveform isRecording={isRecording} className="mb-4" />
-                
-                {/* プログレスバー */}
-                {isRecording && (
-                  <RecordingTimer elapsed={elapsed} remaining={remaining} maxDuration={MAX_DURATION} />
-                )}
-
-                {/* 録音ボタン */}
-                <Button
-                  onClick={isRecording ? handleStopRecording : handleStartRecording}
-                  size="lg"
-                  variant={isRecording ? "destructive" : "default"}
-                  className={`w-24 h-24 rounded-full ${isRecording ? "recording-pulse" : ""}`}
-                >
-                  {isRecording ? (
-                    <Square className="h-8 w-8" />
-                  ) : (
-                    <Mic className="h-8 w-8" />
-                  )}
-                </Button>
-
-                <p className="text-sm text-muted-foreground mt-4">
-                  {isRecording ? "録音中... タップして停止" : "タップして録音開始"}
-                </p>
-
-                {recordingError && (
-                  <p className="text-sm text-destructive mt-2">{recordingError}</p>
+            <CardContent className="space-y-6">
+              <div className="flex flex-col items-center gap-6">
+                {isRecording ? (
+                  <>
+                    <AudioWaveform isRecording={isRecording} />
+                    <RecordingTimer elapsed={elapsed} remaining={remaining} maxDuration={MAX_DURATION} />
+                    <Button
+                      size="lg"
+                      variant="destructive"
+                      onClick={handleStopRecording}
+                      className="w-32 h-32 rounded-full"
+                    >
+                      <Square className="h-8 w-8" />
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      タップして録音を停止
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Button
+                        size="lg"
+                        onClick={handleStartRecording}
+                        className="w-32 h-32 rounded-full bg-primary hover:bg-primary/90"
+                      >
+                        <Mic className="h-8 w-8" />
+                      </Button>
+                    </motion.div>
+                    <p className="text-sm text-muted-foreground">
+                      タップして録音を開始（最大{MAX_DURATION}秒）
+                    </p>
+                  </>
                 )}
               </div>
 
-              <Button
-                variant="outline"
-                onClick={() => {
-                  resetRecording();
-                  setStep("template");
-                }}
-                className="w-full"
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                戻る
-              </Button>
+              {recordingError && (
+                <p className="text-sm text-destructive text-center">{recordingError}</p>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => setStep("template")} className="flex-1">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  戻る
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -541,12 +593,10 @@ export default function CreateLetter() {
         {step === "transcribing" && (
           <Card>
             <CardContent className="py-16">
-              <div className="text-center space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-                <div className="text-lg font-medium">文字起こし中...</div>
-                <p className="text-sm text-muted-foreground">
-                  音声をテキストに変換しています
-                </p>
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-lg font-medium">音声を文字に変換中...</p>
+                <p className="text-sm text-muted-foreground">しばらくお待ちください</p>
               </div>
             </CardContent>
           </Card>
@@ -556,12 +606,10 @@ export default function CreateLetter() {
         {step === "generating" && (
           <Card>
             <CardContent className="py-16">
-              <div className="text-center space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-                <div className="text-lg font-medium">手紙を生成中...</div>
-                <p className="text-sm text-muted-foreground">
-                  AIが温かい手紙を作成しています
-                </p>
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-lg font-medium">手紙を作成中...</p>
+                <p className="text-sm text-muted-foreground">AIがあなたの想いを手紙にしています</p>
               </div>
             </CardContent>
           </Card>
@@ -571,16 +619,16 @@ export default function CreateLetter() {
         {step === "editing" && (
           <Card>
             <CardHeader>
-              <CardTitle>手紙を確認・編集</CardTitle>
+              <CardTitle>手紙を編集する</CardTitle>
               <CardDescription>
-                内容を確認し、必要に応じて編集してください
+                内容を確認・編集してください
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {transcription && (
                 <div className="space-y-2">
-                  <Label>文字起こし結果</Label>
-                  <div className="p-4 bg-muted rounded-lg text-sm">
+                  <Label className="text-muted-foreground">文字起こし結果</Label>
+                  <div className="p-3 bg-muted rounded-lg text-sm">
                     {transcription}
                   </div>
                 </div>
@@ -593,88 +641,67 @@ export default function CreateLetter() {
                   value={finalContent}
                   onChange={(e) => setFinalContent(e.target.value)}
                   rows={12}
-                  className="letter-content text-base"
+                  className="resize-none"
                 />
               </div>
 
               {/* 開封日時設定 */}
-              <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
+              <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  <Label className="text-base font-medium">開封日時を設定（任意）</Label>
+                  <Lock className="h-4 w-4 text-amber-600" />
+                  <Label className="font-medium">開封日時を設定（任意）</Label>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  指定した日時まで手紙を開封できないようにします
+                  設定した日時まで手紙を開封できないようにします
                 </p>
-                <div className="flex flex-wrap gap-4">
-                  <div className="space-y-2">
-                    <Label>日付</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-[200px] justify-start text-left font-normal">
-                          <Calendar className="mr-2 h-4 w-4" />
-                          {unlockDate ? format(unlockDate, "yyyy年M月d日", { locale: ja }) : "日付を選択"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="single"
-                          selected={unlockDate}
-                          onSelect={setUnlockDate}
-                          disabled={(date) => date < new Date()}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>時刻</Label>
-                    <Select value={unlockTime} onValueChange={setUnlockTime}>
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 24 }, (_, i) => (
-                          <SelectItem key={i} value={`${i.toString().padStart(2, "0")}:00`}>
-                            {i.toString().padStart(2, "0")}:00
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {unlockDate && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setUnlockDate(undefined)}
-                      className="self-end text-muted-foreground"
-                    >
-                      クリア
-                    </Button>
-                  )}
+                <div className="flex gap-3">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="flex-1 justify-start">
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {unlockDate ? format(unlockDate, "yyyy年M月d日", { locale: ja }) : "日付を選択"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={unlockDate}
+                        onSelect={setUnlockDate}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Input
+                    type="time"
+                    value={unlockTime}
+                    onChange={(e) => setUnlockTime(e.target.value)}
+                    className="w-32"
+                  />
                 </div>
                 {unlockDate && (
-                  <div className="text-sm text-primary font-medium">
-                    {format(unlockDate, "yyyy年M月d日", { locale: ja })} {unlockTime} に開封可能になります
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setUnlockDate(undefined);
+                      setUnlockTime("09:00");
+                    }}
+                    className="text-muted-foreground"
+                  >
+                    開封日時をクリア
+                  </Button>
                 )}
               </div>
 
               <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    resetRecording();
-                    setStep("recording");
-                  }}
-                  className="flex-1"
-                >
+                <Button variant="outline" onClick={() => setStep("recording")} className="flex-1">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   録り直す
                 </Button>
                 <Button onClick={handleSave} className="flex-1">
-                  <Lock className="mr-2 h-4 w-4" />
-                  暗号化して保存
+                  保存する
+                  <Lock className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </CardContent>
@@ -685,21 +712,27 @@ export default function CreateLetter() {
         {step === "encrypting" && (
           <Card>
             <CardContent className="py-16">
-              <div className="text-center space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-                <div className="text-lg font-medium">{encryptionProgress || "暗号化中..."}</div>
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-lg font-medium">暗号化中...</p>
                 <p className="text-sm text-muted-foreground">
-                  あなたの想いを安全に保護しています
+                  あなたの手紙を安全に暗号化しています
                 </p>
+                <div className="w-full max-w-xs bg-muted rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${encryptionProgress}%` }}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* 完了 */}
+        {/* 完了（ゼロ知識版） */}
         {step === "complete" && (
           <Card>
-            <CardContent className="py-16">
+            <CardContent className="py-8">
               <div className="text-center space-y-6">
                 <div className="w-20 h-20 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
                   <Check className="h-10 w-10" />
@@ -730,12 +763,80 @@ export default function CreateLetter() {
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">暗号化</span>
-                    <span className="text-green-600">AES-256-GCM</span>
+                    <span className="text-green-600">AES-256-GCM + Shamir分割</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">証跡</span>
-                    <span className="text-green-600">SHA-256</span>
+                    <span className="text-muted-foreground">ゼロ知識</span>
+                    <span className="text-green-600">運営者も読めません</span>
                   </div>
+                </div>
+
+                {/* 重要：解錠コードとバックアップシェア */}
+                <Alert className="text-left border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 dark:text-amber-200">
+                    <strong>重要：</strong>以下の情報を安全な場所に保管してください。これらがないと手紙を開封できません。
+                  </AlertDescription>
+                </Alert>
+
+                {/* 解錠コード */}
+                <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Key className="h-5 w-5" />
+                      <span className="font-medium">解錠コード</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowUnlockCode(!showUnlockCode)}
+                    >
+                      {showUnlockCode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={showUnlockCode ? unlockCode || "" : "••••-••••-••••"}
+                      readOnly
+                      className="font-mono text-center text-lg bg-background"
+                    />
+                    <Button size="icon" variant="outline" onClick={handleCopyUnlockCode}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    このコードを受取人に伝えてください（リンクとは別経路で）
+                  </p>
+                </div>
+
+                {/* バックアップシェア */}
+                <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Download className="h-5 w-5" />
+                      <span className="font-medium">バックアップコード</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowBackupShare(!showBackupShare)}
+                    >
+                      {showBackupShare ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={showBackupShare ? backupShare || "" : "••••••••••••••••••••"}
+                      readOnly
+                      className="font-mono text-xs bg-background"
+                    />
+                    <Button size="icon" variant="outline" onClick={handleCopyBackupShare}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    緊急時の復旧用です。紙に印刷して安全な場所に保管してください。
+                  </p>
                 </div>
 
                 {/* 共有リンクセクション */}
@@ -779,13 +880,23 @@ export default function CreateLetter() {
                         </Button>
                       </div>
                       
+                      {/* 警告 */}
+                      <Alert className="text-left">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          <strong>リンクと解錠コードは別々に送ってください。</strong>
+                          <br />
+                          同じメッセージに両方を含めると、漏洩時のリスクが高まります。
+                        </AlertDescription>
+                      </Alert>
+                      
                       {/* LINE/メール共有ボタン */}
                       <div className="flex gap-2 pt-2">
                         <Button
                           variant="outline"
                           className="flex-1 bg-[#06C755] hover:bg-[#05b34d] text-white border-0"
                           onClick={() => {
-                            const text = `大切なあなたへの手紙が届いています。${unlockDate ? `\n開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}` : ""}`;
+                            const text = `大切なあなたへの手紙が届いています。${unlockDate ? `\n開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}` : ""}\n\n※解錠コードは別途お伝えします`;
                             const lineUrl = `https://line.me/R/share?text=${encodeURIComponent(text + "\n" + shareUrl)}`;
                             window.open(lineUrl, "_blank");
                           }}
@@ -798,7 +909,7 @@ export default function CreateLetter() {
                           className="flex-1"
                           onClick={() => {
                             const subject = `大切なあなたへの手紙`;
-                            const body = `大切なあなたへの手紙が届いています。\n\n${unlockDate ? `開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}\n\n` : ""}以下のリンクからご覧ください。\n${shareUrl}`;
+                            const body = `大切なあなたへの手紙が届いています。\n\n${unlockDate ? `開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}\n\n` : ""}以下のリンクからご覧ください。\n${shareUrl}\n\n※解錠コードは別途お伝えします`;
                             window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                           }}
                         >
@@ -808,7 +919,7 @@ export default function CreateLetter() {
                       </div>
                       
                       <p className="text-xs text-muted-foreground">
-                        このリンクを大切な人に送ってください
+                        リンクを送った後、解錠コードを別のメッセージで送ってください
                         {unlockDate && "。開封日時までは内容を見ることができません"}
                       </p>
                     </>
@@ -835,6 +946,8 @@ export default function CreateLetter() {
                       setUnlockTime("09:00");
                       setShareToken(null);
                       setShareUrl(null);
+                      setUnlockCode(null);
+                      setBackupShare(null);
                       resetRecording();
                       resetEncryption();
                     }}

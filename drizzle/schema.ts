@@ -20,6 +20,13 @@ export type InsertUser = typeof users.$inferInsert;
 
 /**
  * 手紙テーブル
+ * 
+ * ゼロ知識設計:
+ * - サーバーは暗号文（ciphertextUrl）とメタデータのみ保持
+ * - 本文（finalContent）は保存しない（nullable、将来的に削除）
+ * - 復号キーはクライアント側でShamir分割
+ * - サーバーはserverShareのみ保持（開封日時後に提供）
+ * - clientShareは解錠コードで暗号化してwrappedClientShareとして保存
  */
 export const letters = mysqlTable("letters", {
   id: int("id").autoincrement().primaryKey(),
@@ -29,19 +36,14 @@ export const letters = mysqlTable("letters", {
   recipientName: varchar("recipientName", { length: 100 }),
   recipientRelation: varchar("recipientRelation", { length: 50 }),
   
-  // 音声データ
+  // 音声データ（URL参照のみ、本文は保存しない）
   audioUrl: varchar("audioUrl", { length: 500 }),
   audioDuration: int("audioDuration"),
   
-  // 文字起こし
-  transcription: text("transcription"),
-  
-  // AI生成
-  aiDraft: text("aiDraft"),
-  finalContent: text("finalContent").notNull(),
+  // テンプレート情報（本文は保存しない）
   templateUsed: varchar("templateUsed", { length: 50 }),
   
-  // 暗号化関連
+  // 暗号化関連（ゼロ知識: 暗号文のみ保存）
   isEncrypted: boolean("isEncrypted").default(true).notNull(),
   encryptionIv: varchar("encryptionIv", { length: 255 }).notNull(),
   ciphertextUrl: varchar("ciphertextUrl", { length: 500 }).notNull(),
@@ -69,11 +71,19 @@ export const letters = mysqlTable("letters", {
   viewCount: int("viewCount").default(0).notNull(),
   lastViewedAt: timestamp("lastViewedAt"),
   
-  // Shamirシェア（Day 4実装）
-  // clientShareはURLフラグメントに含めるため、サーバーには保存しない
-  serverShare: text("serverShare"),  // 開封日時後にのみ提供
-  backupShare: text("backupShare"),  // バックアップ用
-  useShamir: boolean("useShamir").default(false).notNull(),  // Shamir分割を使用しているか
+  // Shamirシェア（ゼロ知識設計）
+  // - serverShare: 開封日時後にのみ提供
+  // - clientShareは解錠コードで暗号化してwrappedClientShareとして保存
+  // - backupShareはサーバーに保存しない（ユーザーが保管）
+  serverShare: text("serverShare"),
+  useShamir: boolean("useShamir").default(true).notNull(),
+  
+  // 解錠コードで暗号化されたclientShare（封筒）
+  wrappedClientShare: text("wrappedClientShare"),
+  wrappedClientShareIv: varchar("wrappedClientShareIv", { length: 255 }),
+  wrappedClientShareSalt: varchar("wrappedClientShareSalt", { length: 255 }),
+  wrappedClientShareKdf: varchar("wrappedClientShareKdf", { length: 50 }),
+  wrappedClientShareKdfIters: int("wrappedClientShareKdfIters"),
   
   // メタデータ
   status: varchar("status", { length: 20 }).default("draft").notNull(),
@@ -104,6 +114,9 @@ export type InsertTemplate = typeof templates.$inferInsert;
 
 /**
  * 下書きテーブル
+ * 
+ * 注意: 下書きはサーバーに平文保存される
+ * ゼロ知識の主張は「封緘後（sealed letter）」に限定
  */
 export const drafts = mysqlTable("drafts", {
   id: int("id").autoincrement().primaryKey(),
@@ -120,7 +133,7 @@ export const drafts = mysqlTable("drafts", {
   audioUrl: varchar("audioUrl", { length: 500 }),
   audioBase64: text("audioBase64"),
   
-  // 文字起こし・下書き
+  // 文字起こし・下書き（封緘前なので平文保存）
   transcription: text("transcription"),
   aiDraft: text("aiDraft"),
   finalContent: text("finalContent"),

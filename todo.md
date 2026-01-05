@@ -57,3 +57,28 @@
 - [x] 招待コード生成・検証機能（OAuthで代替）
 - [x] フィードバックフォーム作成（お問い合わせページで代替）
 - [x] 本番デプロイ準備（チェックポイント作成済み）
+
+
+## ゼロ知識型（B）への修正 - 致命的設計破綻の修正
+
+### 優先度S: 致命的修正（必須）
+- [x] DBスキーマ修正: letters.finalContentをnullable化
+- [x] DBスキーマ修正: wrappedClientShare関連カラム追加（wrappedClientShare, wrappedClientShareIv, wrappedClientShareSalt, wrappedClientShareKdf, wrappedClientShareKdfIters）
+- [x] DBスキーマ修正: letters.backupShareカラム削除（サーバーに保存しない）
+- [x] クライアント側Shamir分割: client/src/lib/shamir.tsにsplitKey追加
+- [x] クライアント側暗号化: client/src/lib/crypto.tsにwrapClientShare/unwrapClientShare追加
+- [x] サーバーAPI修正: letter.createからfinalContent/encryptionKey削除、serverShare追加
+- [x] サーバーAPI修正: letter.setUnlockEnvelope新規作成
+- [x] サーバーAPI修正: letter.getByShareTokenからfinalContent削除、unlockEnvelope追加
+- [x] CreateLetter.tsx修正: #key廃止、解錠コード生成UI、envelope保存
+- [x] ShareLetter.tsx修正: 解錠コード入力UI、復号フロー更新
+- [x] MyLetters.tsx修正: finalContentプレビュー削除
+
+### 優先度A: 重要修正
+- [ ] OpenTimestamps: 「送信済み」表示に修正（「永久に記録されました」は言い過ぎ）
+- [ ] OGP/プレビュー対策: サーバーサイドでOGP用HTML返却
+- [ ] ドキュメント更新: USER_GUIDE.md, DAY2-7_SUMMARY.mdから#key記述削除
+
+### 注意事項
+- draftsテーブルはサーバーに平文保存されている → 「封緘後はゼロ知識」に主張を限定
+- 解錠コードは十分な長さが必要（短いと総当たり攻撃される）

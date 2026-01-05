@@ -9,7 +9,7 @@ import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import { stampHash, generateProofInfo } from "./opentimestamps";
-import { splitKey, combineShares, canProvideServerShare, generateShareInfo } from "./shamir";
+import { canProvideServerShare } from "./shamir";
 
 export const appRouter = router({
   system: systemRouter,
@@ -43,39 +43,43 @@ export const appRouter = router({
   }),
 
   // ============================================
-  // Letter Router
+  // Letter Router（ゼロ知識設計）
   // ============================================
   letter: router({
+    /**
+     * 手紙作成（ゼロ知識版）
+     * 
+     * - サーバーには暗号文とメタデータのみ送信
+     * - 本文（finalContent）は送信しない
+     * - 復号キーは送信しない（クライアント側でShamir分割済み）
+     * - serverShareのみサーバーに保存
+     */
     create: protectedProcedure
       .input(z.object({
         recipientName: z.string().optional(),
         recipientRelation: z.string().optional(),
         audioUrl: z.string().optional(),
         audioDuration: z.number().optional(),
-        transcription: z.string().optional(),
-        aiDraft: z.string().optional(),
-        finalContent: z.string(),
         templateUsed: z.string().optional(),
+        // 暗号化関連（本文は送らない）
         encryptionIv: z.string(),
         ciphertextUrl: z.string(),
+        // 証跡
         proofHash: z.string(),
+        // タイムロック
         unlockAt: z.date().optional(),
         unlockPolicy: z.string().optional(),
-        encryptionKey: z.string(), // 復号キー（Shamir分割用）
+        // Shamir（クライアント分割済み）
+        useShamir: z.boolean().default(true),
+        serverShare: z.string(), // クライアントで分割済みのserverShare
       }))
       .mutation(async ({ ctx, input }) => {
-        // Shamir分割：復号キーを3つのシェアに分割
-        const shares = await splitKey(input.encryptionKey);
-        
         const letterId = await createLetter({
           authorId: ctx.user.id,
           recipientName: input.recipientName,
           recipientRelation: input.recipientRelation,
           audioUrl: input.audioUrl,
           audioDuration: input.audioDuration,
-          transcription: input.transcription,
-          aiDraft: input.aiDraft,
-          finalContent: input.finalContent,
           templateUsed: input.templateUsed,
           encryptionIv: input.encryptionIv,
           ciphertextUrl: input.ciphertextUrl,
@@ -84,10 +88,9 @@ export const appRouter = router({
           unlockPolicy: input.unlockPolicy || "datetime",
           status: "sealed",
           proofCreatedAt: new Date(),
-          // Shamirシェアを保存（clientShareはサーバーに保存しない）
-          serverShare: shares.serverShare,
-          backupShare: shares.backupShare,
-          useShamir: true,
+          // Shamirシェア（serverShareのみ保存）
+          serverShare: input.serverShare,
+          useShamir: input.useShamir,
         });
 
         // OpenTimestampsにハッシュを送信（非同期で実行）
@@ -106,8 +109,35 @@ export const appRouter = router({
           console.error(`[OTS] Error stamping letter ${letterId}:`, error);
         });
 
-        // clientShareを返す（URLフラグメントに含める）
-        return { id: letterId, clientShare: shares.clientShare };
+        return { id: letterId };
+      }),
+
+    /**
+     * 解錠コードで暗号化されたclientShareを保存（封筒設定）
+     */
+    setUnlockEnvelope: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        wrappedClientShare: z.string(),
+        wrappedClientShareIv: z.string(),
+        wrappedClientShareSalt: z.string(),
+        wrappedClientShareKdf: z.string(),
+        wrappedClientShareKdfIters: z.number(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.id);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        await updateLetter(input.id, {
+          wrappedClientShare: input.wrappedClientShare,
+          wrappedClientShareIv: input.wrappedClientShareIv,
+          wrappedClientShareSalt: input.wrappedClientShareSalt,
+          wrappedClientShareKdf: input.wrappedClientShareKdf,
+          wrappedClientShareKdfIters: input.wrappedClientShareKdfIters,
+        });
+        
+        return { ok: true };
       }),
 
     getById: protectedProcedure
@@ -167,7 +197,14 @@ export const appRouter = router({
         return { shareToken };
       }),
 
-    // 共有リンクから手紙を取得（公開エンドポイント）
+    /**
+     * 共有リンクから手紙を取得（公開エンドポイント）
+     * 
+     * ゼロ知識設計:
+     * - 本文（finalContent）は返さない
+     * - 暗号文URL、IV、封筒（wrappedClientShare）を返す
+     * - serverShareは開封日時後にのみ返す
+     */
     getByShareToken: publicProcedure
       .input(z.object({ 
         shareToken: z.string(),
@@ -219,6 +256,15 @@ export const appRouter = router({
         // Shamirシェアの提供判定
         const shouldProvideServerShare = letter.useShamir && canProvideServerShare(unlockAt);
         
+        // 封筒（解錠コードで暗号化されたclientShare）
+        const unlockEnvelope = letter.wrappedClientShare ? {
+          wrappedClientShare: letter.wrappedClientShare,
+          wrappedClientShareIv: letter.wrappedClientShareIv || "",
+          wrappedClientShareSalt: letter.wrappedClientShareSalt || "",
+          wrappedClientShareKdf: letter.wrappedClientShareKdf || "pbkdf2-sha256",
+          wrappedClientShareKdfIters: letter.wrappedClientShareKdfIters || 200000,
+        } : null;
+        
         if (!canUnlock) {
           // まだ開封できない（サーバーシェアも提供しない）
           return {
@@ -230,6 +276,8 @@ export const appRouter = router({
             useShamir: letter.useShamir,
             // サーバーシェアは開封日時前なので提供しない
             serverShare: null,
+            // 封筒は常に返す（解錠コードがないと開けない）
+            unlockEnvelope,
           };
         }
         
@@ -253,11 +301,13 @@ export const appRouter = router({
           useShamir: letter.useShamir,
           // 開封日時後なのでサーバーシェアを提供
           serverShare: shouldProvideServerShare ? letter.serverShare : null,
+          // 封筒（解錠コードで暗号化されたclientShare）
+          unlockEnvelope,
           letter: {
             id: letter.id,
             recipientName: letter.recipientName,
             templateUsed: letter.templateUsed,
-            finalContent: letter.finalContent,
+            // 本文は返さない（ゼロ知識）
             encryptionIv: letter.encryptionIv,
             ciphertextUrl: letter.ciphertextUrl,
             createdAt: letter.createdAt.toISOString(),
@@ -293,7 +343,6 @@ export const appRouter = router({
         
         return {
           text: result.text,
-          language: result.language,
         };
       }),
 
@@ -342,9 +391,6 @@ export const appRouter = router({
       }),
   }),
 
-  // ============================================
-  // Storage Router
-  // ============================================
   // ============================================
   // Draft Router
   // ============================================
@@ -430,6 +476,9 @@ export const appRouter = router({
       }),
   }),
 
+  // ============================================
+  // Storage Router
+  // ============================================
   storage: router({
     uploadAudio: protectedProcedure
       .input(z.object({

@@ -3,6 +3,8 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   Loader2, 
   Mail, 
@@ -20,12 +22,13 @@ import {
   Baby,
   HandHeart,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Key
 } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useLocation } from "wouter";
-import { decryptLetter } from "@/lib/crypto";
+import { decryptLetter, unwrapClientShare, type UnlockEnvelope } from "@/lib/crypto";
 import { combineShares } from "@/lib/shamir";
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -71,19 +74,13 @@ export default function ShareLetter() {
   
   const [userAgent, setUserAgent] = useState("");
   const [countdown, setCountdown] = useState<string>("");
-  const [clientShare, setClientShare] = useState<string | null>(null);
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
   const [isDecrypting, setIsDecrypting] = useState(false);
-
-  // URLフラグメントからクライアントシェアを取得
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.startsWith("#key=")) {
-      const share = decodeURIComponent(hash.substring(5));
-      setClientShare(share);
-    }
-  }, []);
+  
+  // ゼロ知識設計: 解錠コード入力
+  const [unlockCode, setUnlockCode] = useState("");
+  const [showUnlockInput, setShowUnlockInput] = useState(true);
 
   useEffect(() => {
     setUserAgent(navigator.userAgent);
@@ -94,57 +91,76 @@ export default function ShareLetter() {
     { enabled: !!token && !!userAgent }
   );
 
-  // 復号処理（Shamir分割対応）
-  useEffect(() => {
-    const performDecryption = async () => {
-      if (data && "canUnlock" in data && data.canUnlock && data.letter && clientShare) {
-        // 既に復号済みの場合はスキップ
-        if (decryptedContent) return;
-        
-        setIsDecrypting(true);
-        setDecryptionError(null);
-        
-        try {
-          let decryptionKey: string;
-          
-          // Shamir分割を使用している場合はシェアを結合
-          if (data.useShamir && data.serverShare) {
-            decryptionKey = await combineShares(clientShare, data.serverShare);
-          } else {
-            // 従来の方式（後方互換性）
-            decryptionKey = clientShare;
-          }
-          
-          // S3から暗号文を取得
-          const response = await fetch(data.letter.ciphertextUrl);
-          if (!response.ok) {
-            throw new Error("暗号文の取得に失敗しました");
-          }
-          const ciphertext = await response.text();
-          
-          // 復号
-          const plaintext = await decryptLetter(
-            ciphertext,
-            data.letter.encryptionIv,
-            decryptionKey
-          );
-          
-          setDecryptedContent(plaintext);
-        } catch (err) {
-          console.error("Decryption error:", err);
-          setDecryptionError(
-            err instanceof Error 
-              ? err.message 
-              : "復号に失敗しました。リンクが正しいか確認してください。"
-          );
-        } finally {
-          setIsDecrypting(false);
-        }
-      }
-    };
+  // 解錠コードで復号を試行
+  const handleUnlock = async () => {
+    if (!data || !("canUnlock" in data) || !data.canUnlock || !data.letter) return;
+    if (!unlockCode.trim()) {
+      setDecryptionError("解錠コードを入力してください");
+      return;
+    }
     
-    performDecryption();
-  }, [data, clientShare, decryptedContent]);
+    setIsDecrypting(true);
+    setDecryptionError(null);
+    
+    try {
+      let decryptionKey: string;
+      
+      // Shamir分割を使用している場合
+      if (data.useShamir && data.unlockEnvelope && data.serverShare) {
+        // 1. 解錠コードでclientShareを復号
+        const envelope: UnlockEnvelope = {
+          wrappedClientShare: data.unlockEnvelope.wrappedClientShare,
+          wrappedClientShareIv: data.unlockEnvelope.wrappedClientShareIv,
+          wrappedClientShareSalt: data.unlockEnvelope.wrappedClientShareSalt,
+          wrappedClientShareKdf: data.unlockEnvelope.wrappedClientShareKdf,
+          wrappedClientShareKdfIters: data.unlockEnvelope.wrappedClientShareKdfIters,
+        };
+        
+        // ハイフンを除去して解錠コードを正規化
+        const normalizedCode = unlockCode.replace(/-/g, "").toUpperCase();
+        
+        const clientShare = await unwrapClientShare(envelope, normalizedCode);
+        
+        // 2. clientShareとserverShareを結合して復号キーを復元
+        decryptionKey = await combineShares(clientShare, data.serverShare);
+      } else {
+        // 従来の方式（後方互換性）- 解錠コードがそのまま復号キー
+        setDecryptionError("この手紙は従来の方式で暗号化されています。正しいリンクを使用してください。");
+        setIsDecrypting(false);
+        return;
+      }
+      
+      // S3から暗号文を取得
+      const response = await fetch(data.letter.ciphertextUrl);
+      if (!response.ok) {
+        throw new Error("暗号文の取得に失敗しました");
+      }
+      const ciphertext = await response.text();
+      
+      // 復号
+      const plaintext = await decryptLetter(
+        ciphertext,
+        data.letter.encryptionIv,
+        decryptionKey
+      );
+      
+      setDecryptedContent(plaintext);
+      setShowUnlockInput(false);
+    } catch (err) {
+      console.error("Decryption error:", err);
+      if (err instanceof Error && err.message.includes("decrypt")) {
+        setDecryptionError("解錠コードが正しくありません。もう一度確認してください。");
+      } else {
+        setDecryptionError(
+          err instanceof Error 
+            ? err.message 
+            : "復号に失敗しました。解錠コードを確認してください。"
+        );
+      }
+    } finally {
+      setIsDecrypting(false);
+    }
+  };
 
   // カウントダウン更新
   useEffect(() => {
@@ -302,25 +318,87 @@ export default function ShareLetter() {
   if (data && "canUnlock" in data && data.canUnlock && data.letter) {
     const letter = data.letter;
     
-    // クライアントシェアがない場合
-    if (!clientShare) {
+    // 解錠コード入力画面
+    if (showUnlockInput && !decryptedContent) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
           <Card className="max-w-md w-full">
-            <CardContent className="py-12">
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
-                  <KeyRound className="h-8 w-8" />
+            <CardHeader className="text-center">
+              <div className="w-20 h-20 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+                {letter.templateUsed ? (
+                  iconMap[letter.templateUsed] || <Mail className="h-8 w-8" />
+                ) : (
+                  <Mail className="h-8 w-8" />
+                )}
+              </div>
+              <CardTitle className="text-2xl">
+                {letter.recipientName ? `${letter.recipientName}へ` : "あなたへ"}
+              </CardTitle>
+              <CardDescription>
+                {letter.templateUsed && templateNameMap[letter.templateUsed]}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 text-primary mb-4">
+                  <Key className="h-5 w-5" />
+                  <span className="font-medium">解錠コードを入力</span>
                 </div>
-                <h2 className="text-xl font-bold">復号キーが見つかりません</h2>
-                <p className="text-muted-foreground">
-                  この手紙を開封するには、正しい共有リンクが必要です。
-                  送信者から受け取ったリンクを再度確認してください。
-                </p>
-                <Button onClick={() => navigate("/")} variant="outline">
-                  <Home className="mr-2 h-4 w-4" />
-                  ホームへ
-                </Button>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="unlockCode">解錠コード</Label>
+                    <Input
+                      id="unlockCode"
+                      type="text"
+                      placeholder="XXXX-XXXX-XXXX"
+                      value={unlockCode}
+                      onChange={(e) => setUnlockCode(e.target.value.toUpperCase())}
+                      className="text-center text-lg font-mono"
+                      autoComplete="off"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleUnlock();
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      送信者から受け取った解錠コードを入力してください
+                    </p>
+                  </div>
+                  
+                  {decryptionError && (
+                    <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+                      {decryptionError}
+                    </div>
+                  )}
+                  
+                  <Button 
+                    onClick={handleUnlock} 
+                    disabled={isDecrypting || !unlockCode.trim()}
+                    className="w-full"
+                  >
+                    {isDecrypting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        開封中...
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="mr-2 h-4 w-4" />
+                        手紙を開封する
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                <div className="mt-6 pt-6 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    この手紙はゼロ知識暗号化で保護されています。
+                    <br />
+                    運営者を含め、解錠コードなしでは誰も読むことができません。
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -336,31 +414,6 @@ export default function ShareLetter() {
             <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
             <p className="text-muted-foreground">手紙を開封しています...</p>
           </div>
-        </div>
-      );
-    }
-    
-    // 復号エラー
-    if (decryptionError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
-          <Card className="max-w-md w-full">
-            <CardContent className="py-12">
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
-                  <AlertCircle className="h-8 w-8" />
-                </div>
-                <h2 className="text-xl font-bold">開封に失敗しました</h2>
-                <p className="text-muted-foreground">
-                  {decryptionError}
-                </p>
-                <Button onClick={() => navigate("/")} variant="outline">
-                  <Home className="mr-2 h-4 w-4" />
-                  ホームへ
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       );
     }
@@ -387,7 +440,7 @@ export default function ShareLetter() {
             </CardHeader>
             <CardContent className="py-8">
               <div className="letter-content whitespace-pre-wrap leading-relaxed text-lg">
-                {decryptedContent || letter.finalContent}
+                {decryptedContent}
               </div>
               
               <div className="mt-8 pt-6 border-t text-sm text-muted-foreground space-y-2">
@@ -407,12 +460,14 @@ export default function ShareLetter() {
                     <span>{format(new Date(letter.unlockedAt), "yyyy年M月d日 HH:mm", { locale: ja })}</span>
                   </div>
                 )}
-                {decryptedContent && (
-                  <div className="flex justify-between">
-                    <span>暗号化</span>
-                    <span className="text-green-600">AES-256-GCM で保護</span>
-                  </div>
-                )}
+                <div className="flex justify-between">
+                  <span>暗号化</span>
+                  <span className="text-green-600">AES-256-GCM + Shamir分割</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>ゼロ知識</span>
+                  <span className="text-green-600">運営者も読めません</span>
+                </div>
                 
                 {/* 証跡情報 */}
                 {letter.proofInfo && (
@@ -454,5 +509,13 @@ export default function ShareLetter() {
     );
   }
 
-  return null;
+  // フォールバック
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center space-y-4">
+        <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
+        <p className="text-muted-foreground">読み込み中...</p>
+      </div>
+    </div>
+  );
 }

@@ -159,11 +159,10 @@ export default function MyLetters() {
                       <span className="text-green-600">暗号化済み</span>
                     </div>
                   </div>
-                  {letter.finalContent && (
-                    <p className="mt-3 text-sm text-muted-foreground line-clamp-2 letter-content">
-                      {letter.finalContent.substring(0, 100)}...
-                    </p>
-                  )}
+                  {/* ゼロ知識設計: サーバーに本文を保存しないため、プレビューは表示しない */}
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    暗号化された手紙（運営者も読めません）
+                  </p>
                 </CardContent>
               </Card>
             ))}
