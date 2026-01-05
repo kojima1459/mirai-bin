@@ -881,12 +881,15 @@ export default function CreateLetter() {
                       </div>
                       
                       {/* 警告 */}
-                      <Alert className="text-left">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">
-                          <strong>リンクと解錠コードは別々に送ってください。</strong>
-                          <br />
-                          同じメッセージに両方を含めると、漏洩時のリスクが高まります。
+                      <Alert className="text-left border-red-500 bg-red-50 dark:bg-red-950/20">
+                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                        <AlertDescription className="text-sm text-red-800 dark:text-red-200">
+                          <strong>重要：リンクと解錠コードは別々に送ってください</strong>
+                          <ul className="mt-2 space-y-1 list-disc list-inside">
+                            <li>同じメッセージに両方を含めない</li>
+                            <li>スクリーンショットに両方を入れない</li>
+                            <li>漏洩時に第三者が開封できてしまいます</li>
+                          </ul>
                         </AlertDescription>
                       </Alert>
                       

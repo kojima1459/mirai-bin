@@ -90,6 +90,9 @@ export default function ShareLetter() {
     { shareToken: token, userAgent },
     { enabled: !!token && !!userAgent }
   );
+  
+  // 復号成功後に開封済みをマークするAPI
+  const markOpenedMutation = trpc.letter.markOpened.useMutation();
 
   // 解錠コードで復号を試行
   const handleUnlock = async () => {
@@ -146,6 +149,9 @@ export default function ShareLetter() {
       
       setDecryptedContent(plaintext);
       setShowUnlockInput(false);
+      
+      // 復号成功後に開封済みをマーク（バックグラウンドで実行）
+      markOpenedMutation.mutate({ shareToken: token });
     } catch (err) {
       console.error("Decryption error:", err);
       if (err instanceof Error && err.message.includes("decrypt")) {

@@ -282,10 +282,7 @@ export const appRouter = router({
         }
         
         // 開封可能
-        // 初回開封時にステータスを更新
-        if (!letter.isUnlocked) {
-          await unlockLetter(letter.id);
-        }
+        // 注意: ここでは開封済みにしない（復号成功後にmarkOpenedを呼ぶ）
         
         // 証跡情報を生成
         const proofInfo = generateProofInfo(
@@ -316,6 +313,45 @@ export const appRouter = router({
             proofHash: letter.proofHash,
             proofInfo,
           },
+        };
+      }),
+
+    /**
+     * 手紙を開封済みにマーク（復号成功後にクライアントから呼ぶ）
+     * 
+     * ゼロ知識設計:
+     * - getByShareTokenでは開封済みにしない（Botや誤アクセス対策）
+     * - 復号成功後にこのAPIを呼んで開封済みにする
+     * - WHERE isUnlocked = false で原子的更新（二重開封レース防止）
+     */
+    markOpened: publicProcedure
+      .input(z.object({
+        shareToken: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const letter = await getLetterByShareToken(input.shareToken);
+        if (!letter) {
+          return { success: false, error: "not_found" };
+        }
+        
+        // キャンセルされた手紙は開封できない
+        if (letter.status === "canceled") {
+          return { success: false, error: "canceled" };
+        }
+        
+        // 開封日時チェック
+        const now = new Date();
+        const unlockAt = letter.unlockAt ? new Date(letter.unlockAt) : null;
+        if (unlockAt && now < unlockAt) {
+          return { success: false, error: "not_yet" };
+        }
+        
+        // 原子的更新（既に開封済みならfalseが返る）
+        const isFirstOpen = await unlockLetter(letter.id);
+        
+        return { 
+          success: true, 
+          isFirstOpen,
         };
       }),
   }),

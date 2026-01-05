@@ -176,16 +176,28 @@ export async function incrementViewCount(id: number): Promise<void> {
   }
 }
 
-export async function unlockLetter(id: number): Promise<void> {
+/**
+ * 手紙を開封済みにマーク（原子的更新）
+ * 
+ * WHERE isUnlocked = false で二重開封レースを防止
+ * 
+ * @param id 手紙ID
+ * @returns 更新が成功したかどうか（既に開封済みの場合はfalse）
+ */
+export async function unlockLetter(id: number): Promise<boolean> {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  await db.update(letters).set({ 
+  // 原子的更新: isUnlocked = false の場合のみ更新
+  const result = await db.update(letters).set({ 
     isUnlocked: true,
     unlockedAt: new Date()
-  }).where(eq(letters.id, id));
+  }).where(and(eq(letters.id, id), eq(letters.isUnlocked, false)));
+  
+  // affectedRows > 0 なら初回開封
+  return (result as any)[0]?.affectedRows > 0;
 }
 
 // ============================================
