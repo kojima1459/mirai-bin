@@ -83,3 +83,28 @@
 ### テスト
 - [x] テンプレート追加テスト
 - [x] 通知機能テスト
+
+
+## Day 4: 下書き保存機能
+
+### データベース
+- [x] draftsテーブル追加（userId, templateId, recipientName, recipientRelation, transcription, aiDraft, finalContent, audioUrl, unlockAt, step, createdAt, updatedAt）
+
+### バックエンドAPI
+- [x] 下書き作成API
+- [x] 下書き更新API（自動保存用）
+- [x] 下書き一覧取得API
+- [x] 下書き詳細取得API
+- [x] 下書き削除API
+- [x] 下書きから手紙作成API
+
+### フロントエンド
+- [x] 自動保存機能（debounce付き）
+- [x] 下書き復元UI
+- [x] 下書き一覧ページ
+- [x] 下書き削除確認ダイアログ
+- [x] 作成途中での離脱警告
+
+### テスト
+- [x] 下書きCRUDテスト
+- [x] 自動保存テスト

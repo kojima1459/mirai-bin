@@ -6,7 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { 
   Cake, GraduationCap, Heart, Mail, Loader2, PenLine, 
-  School, BookOpen, Star, Briefcase, Baby, HandHeart 
+  School, BookOpen, Star, Briefcase, Baby, HandHeart, FileEdit 
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -83,6 +83,12 @@ export default function Home() {
           <div className="flex items-center gap-4">
             {isAuthenticated ? (
               <>
+                <Link href="/drafts">
+                  <Button variant="ghost" size="sm">
+                    <FileEdit className="h-4 w-4 mr-1" />
+                    下書き
+                  </Button>
+                </Link>
                 <Link href="/my-letters">
                   <Button variant="ghost">マイレター</Button>
                 </Link>

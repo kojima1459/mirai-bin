@@ -94,3 +94,40 @@ export const templates = mysqlTable("templates", {
 
 export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = typeof templates.$inferInsert;
+
+/**
+ * 下書きテーブル
+ */
+export const drafts = mysqlTable("drafts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  // テンプレート情報
+  templateName: varchar("templateName", { length: 50 }),
+  
+  // 受取人情報
+  recipientName: varchar("recipientName", { length: 100 }),
+  recipientRelation: varchar("recipientRelation", { length: 50 }),
+  
+  // 音声データ
+  audioUrl: varchar("audioUrl", { length: 500 }),
+  audioBase64: text("audioBase64"),
+  
+  // 文字起こし・下書き
+  transcription: text("transcription"),
+  aiDraft: text("aiDraft"),
+  finalContent: text("finalContent"),
+  
+  // 開封日時
+  unlockAt: timestamp("unlockAt"),
+  
+  // 進捗状態
+  currentStep: varchar("currentStep", { length: 20 }).default("template").notNull(),
+  
+  // メタデータ
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Draft = typeof drafts.$inferSelect;
+export type InsertDraft = typeof drafts.$inferInsert;

@@ -12,6 +12,7 @@ import { useEncryption } from "@/hooks/useEncryption";
 import { formatDuration } from "@/lib/audio";
 import { getLoginUrl } from "@/const";
 import { useLocation, useSearch } from "wouter";
+import { useDraftAutoSave } from "@/hooks/useDraftAutoSave";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -65,6 +66,7 @@ export default function CreateLetter() {
   const searchString = useSearch();
   const searchParams = new URLSearchParams(searchString);
   const initialTemplate = searchParams.get("template") || "";
+  const draftIdParam = searchParams.get("draft");
 
   // State
   const [step, setStep] = useState<Step>("template");
@@ -80,6 +82,7 @@ export default function CreateLetter() {
   const [unlockTime, setUnlockTime] = useState("09:00");
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(false);
 
   // Hooks
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
@@ -93,6 +96,71 @@ export default function CreateLetter() {
   const uploadCiphertextMutation = trpc.storage.uploadCiphertext.useMutation();
   const createLetterMutation = trpc.letter.create.useMutation();
   const generateShareLinkMutation = trpc.letter.generateShareLink.useMutation();
+  const deleteDraftMutation = trpc.draft.delete.useMutation();
+
+  // 下書き自動保存
+  const { draftId, isSaving, lastSaved, save: saveDraft, saveImmediately, loadDraft, resetDraft, setDraftId } = useDraftAutoSave({
+    debounceMs: 3000,
+    onSaved: () => {
+      // 保存成功時は静かに表示
+    },
+  });
+
+  // 下書きデータ取得
+  const { data: draftData, isLoading: isDraftLoading } = trpc.draft.get.useQuery(
+    { id: Number(draftIdParam) },
+    { enabled: !!draftIdParam }
+  );
+
+  // 下書きから復元
+  useEffect(() => {
+    if (draftData && !isLoadingDraft) {
+      setIsLoadingDraft(true);
+      setDraftId(draftData.id);
+      if (draftData.templateName) setSelectedTemplate(draftData.templateName);
+      if (draftData.recipientName) setRecipientName(draftData.recipientName);
+      if (draftData.recipientRelation) setRecipientRelation(draftData.recipientRelation);
+      if (draftData.audioUrl) setAudioUrl(draftData.audioUrl);
+      if (draftData.transcription) setTranscription(draftData.transcription);
+      if (draftData.aiDraft) setAiDraft(draftData.aiDraft);
+      if (draftData.finalContent) setFinalContent(draftData.finalContent);
+      if (draftData.unlockAt) {
+        const date = new Date(draftData.unlockAt);
+        setUnlockDate(date);
+        setUnlockTime(format(date, "HH:mm"));
+      }
+      // ステップを復元
+      if (draftData.currentStep === "editing" || draftData.finalContent) {
+        setStep("editing");
+      } else if (draftData.transcription) {
+        setStep("editing");
+      } else if (draftData.templateName) {
+        setStep("recording");
+      }
+      setIsLoadingDraft(false);
+      toast.success("下書きを読み込みました");
+    }
+  }, [draftData]);
+
+  // 自動保存（ステップや内容が変わったとき）
+  useEffect(() => {
+    // completeステップでは保存しない
+    if (step === "complete" || step === "encrypting") return;
+    // テンプレートが選択されていない場合は保存しない
+    if (!selectedTemplate && !recipientName && !transcription && !finalContent) return;
+
+    saveDraft({
+      templateName: selectedTemplate || undefined,
+      recipientName: recipientName || undefined,
+      recipientRelation: recipientRelation || undefined,
+      audioUrl: audioUrl || undefined,
+      transcription: transcription || undefined,
+      aiDraft: aiDraft || undefined,
+      finalContent: finalContent || undefined,
+      unlockAt: unlockDate ? getUnlockAt()?.toISOString() : undefined,
+      currentStep: step,
+    });
+  }, [selectedTemplate, recipientName, recipientRelation, transcription, aiDraft, finalContent, unlockDate, unlockTime, step]);
 
   // 認証チェック
   useEffect(() => {
@@ -227,6 +295,18 @@ export default function CreateLetter() {
       });
 
       setLetterId(letterResult.id);
+      
+      // 下書きを削除（正式保存したので）
+      if (draftId) {
+        try {
+          await deleteDraftMutation.mutateAsync({ id: draftId });
+          resetDraft();
+        } catch (e) {
+          // 下書き削除の失敗は無視
+          console.warn("下書きの削除に失敗しました", e);
+        }
+      }
+      
       setStep("complete");
       toast.success("手紙を保存しました");
     } catch (err) {
@@ -251,14 +331,29 @@ export default function CreateLetter() {
     <div className="min-h-screen bg-background">
       {/* ヘッダー */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex h-16 items-center">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-2 ml-2">
-            <Mail className="h-5 w-5 text-primary" />
-            <span className="font-semibold">手紙を書く</span>
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center gap-2 ml-2">
+              <Mail className="h-5 w-5 text-primary" />
+              <span className="font-semibold">手紙を書く</span>
+            </div>
           </div>
+          {/* 下書き保存インジケーター */}
+          {step !== "complete" && (draftId || isSaving || lastSaved) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>保存中...</span>
+                </>
+              ) : lastSaved ? (
+                <span>下書き保存済み</span>
+              ) : null}
+            </div>
+          )}
         </div>
       </header>
 

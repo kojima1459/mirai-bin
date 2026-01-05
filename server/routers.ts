@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -298,6 +298,91 @@ export const appRouter = router({
   // ============================================
   // Storage Router
   // ============================================
+  // ============================================
+  // Draft Router
+  // ============================================
+  draft: router({
+    create: protectedProcedure
+      .input(z.object({
+        templateName: z.string().optional(),
+        recipientName: z.string().optional(),
+        recipientRelation: z.string().optional(),
+        currentStep: z.string().default("template"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const draftId = await createDraft({
+          userId: ctx.user.id,
+          templateName: input.templateName,
+          recipientName: input.recipientName,
+          recipientRelation: input.recipientRelation,
+          currentStep: input.currentStep,
+        });
+        return { id: draftId };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        templateName: z.string().optional(),
+        recipientName: z.string().optional(),
+        recipientRelation: z.string().optional(),
+        audioUrl: z.string().optional(),
+        audioBase64: z.string().optional(),
+        transcription: z.string().optional(),
+        aiDraft: z.string().optional(),
+        finalContent: z.string().optional(),
+        unlockAt: z.string().optional(),
+        currentStep: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // ユーザーの下書きか確認
+        const draft = await getDraftByUserAndId(ctx.user.id, input.id);
+        if (!draft) {
+          throw new Error("下書きが見つかりません");
+        }
+
+        const updates: Record<string, unknown> = {};
+        if (input.templateName !== undefined) updates.templateName = input.templateName;
+        if (input.recipientName !== undefined) updates.recipientName = input.recipientName;
+        if (input.recipientRelation !== undefined) updates.recipientRelation = input.recipientRelation;
+        if (input.audioUrl !== undefined) updates.audioUrl = input.audioUrl;
+        if (input.audioBase64 !== undefined) updates.audioBase64 = input.audioBase64;
+        if (input.transcription !== undefined) updates.transcription = input.transcription;
+        if (input.aiDraft !== undefined) updates.aiDraft = input.aiDraft;
+        if (input.finalContent !== undefined) updates.finalContent = input.finalContent;
+        if (input.unlockAt !== undefined) updates.unlockAt = new Date(input.unlockAt);
+        if (input.currentStep !== undefined) updates.currentStep = input.currentStep;
+
+        await updateDraft(input.id, updates);
+        return { success: true };
+      }),
+
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return await getDraftsByUser(ctx.user.id);
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const draft = await getDraftByUserAndId(ctx.user.id, input.id);
+        if (!draft) {
+          throw new Error("下書きが見つかりません");
+        }
+        return draft;
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const draft = await getDraftByUserAndId(ctx.user.id, input.id);
+        if (!draft) {
+          throw new Error("下書きが見つかりません");
+        }
+        await deleteDraft(input.id);
+        return { success: true };
+      }),
+  }),
+
   storage: router({
     uploadAudio: protectedProcedure
       .input(z.object({

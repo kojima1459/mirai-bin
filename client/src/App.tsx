@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import CreateLetter from "./pages/CreateLetter";
 import MyLetters from "./pages/MyLetters";
 import ShareLetter from "./pages/ShareLetter";
+import Drafts from "./pages/Drafts";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
       <Route path={"/create"} component={CreateLetter} />
       <Route path={"/my-letters"} component={MyLetters} />
       <Route path={"/share/:token"} component={ShareLetter} />
+      <Route path={"/drafts"} component={Drafts} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

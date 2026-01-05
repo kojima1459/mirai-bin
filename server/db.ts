@@ -1,6 +1,6 @@
 import { eq, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, letters, templates, InsertLetter, InsertTemplate, Letter, Template } from "../drizzle/schema";
+import { InsertUser, users, letters, templates, drafts, InsertLetter, InsertTemplate, InsertDraft, Letter, Template, Draft } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -542,4 +542,70 @@ export async function seedTemplates(): Promise<void> {
   }
 
   console.log(`[Database] Seeded ${defaultTemplates.length} default templates`);
+}
+
+
+// ============================================
+// Draft Queries
+// ============================================
+
+export async function createDraft(draft: InsertDraft): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.insert(drafts).values(draft);
+  return result[0].insertId;
+}
+
+export async function getDraftById(id: number): Promise<Draft | undefined> {
+  const db = await getDb();
+  if (!db) {
+    return undefined;
+  }
+
+  const result = await db.select().from(drafts).where(eq(drafts.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getDraftsByUser(userId: number): Promise<Draft[]> {
+  const db = await getDb();
+  if (!db) {
+    return [];
+  }
+
+  return await db.select().from(drafts)
+    .where(eq(drafts.userId, userId))
+    .orderBy(desc(drafts.updatedAt));
+}
+
+export async function updateDraft(id: number, updates: Partial<InsertDraft>): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(drafts).set(updates).where(eq(drafts.id, id));
+}
+
+export async function deleteDraft(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.delete(drafts).where(eq(drafts.id, id));
+}
+
+export async function getDraftByUserAndId(userId: number, draftId: number): Promise<Draft | undefined> {
+  const db = await getDb();
+  if (!db) {
+    return undefined;
+  }
+
+  const result = await db.select().from(drafts)
+    .where(and(eq(drafts.id, draftId), eq(drafts.userId, userId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
 }
