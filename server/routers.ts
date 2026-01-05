@@ -349,6 +349,21 @@ export const appRouter = router({
         // 原子的更新（既に開封済みならfalseが返る）
         const isFirstOpen = await unlockLetter(letter.id);
         
+        // 初回開封時にオーナーに通知
+        if (isFirstOpen) {
+          try {
+            const { notifyOwner } = await import("./_core/notification");
+            const unlockTimeStr = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+            await notifyOwner({
+              title: `未来便: 手紙が開封されました`,
+              content: `あなたの手紙が開封されました。\n\n宛先: ${letter.recipientName || "未設定"}\n開封日時: ${unlockTimeStr}\n\n※ 本文はゼロ知識設計のため、運営者も読めません。`,
+            });
+          } catch (err) {
+            // 通知失敗はログのみ（開封処理は成功させる）
+            console.warn("[markOpened] Failed to notify owner:", err);
+          }
+        }
+        
         return { 
           success: true, 
           isFirstOpen,
