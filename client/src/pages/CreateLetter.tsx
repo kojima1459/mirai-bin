@@ -37,6 +37,8 @@ import {
   Baby,
   HandHeart
 } from "lucide-react";
+import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
+import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -82,6 +84,7 @@ export default function CreateLetter() {
   const [unlockTime, setUnlockTime] = useState("09:00");
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
 
   // Hooks
@@ -229,12 +232,13 @@ export default function CreateLetter() {
 
   // 共有リンクを生成
   const handleGenerateShareLink = async () => {
-    if (!letterId) return;
+    if (!letterId || !encryptionKey) return;
     
     try {
       const result = await generateShareLinkMutation.mutateAsync({ id: letterId });
       setShareToken(result.shareToken);
-      const url = `${window.location.origin}/share/${result.shareToken}`;
+      // 復号キーをURLフラグメントに含める（サーバーには送信されない）
+      const url = `${window.location.origin}/share/${result.shareToken}#key=${encodeURIComponent(encryptionKey)}`;
       setShareUrl(url);
       toast.success("共有リンクを生成しました");
     } catch (err) {
@@ -278,7 +282,7 @@ export default function CreateLetter() {
       // 開封日時を取得
       const unlockAt = getUnlockAt();
 
-      // DB保存
+      // DB保存（Shamir分割のためencryptionKeyも送信）
       const letterResult = await createLetterMutation.mutateAsync({
         recipientName: recipientName || undefined,
         recipientRelation: recipientRelation || undefined,
@@ -292,9 +296,12 @@ export default function CreateLetter() {
         ciphertextUrl: uploadResult.url,
         proofHash: encryptResult.proof.hash,
         unlockAt: unlockAt,
+        encryptionKey: encryptResult.encryption.key, // Shamir分割用
       });
 
       setLetterId(letterResult.id);
+      // clientShareを共有リンクに使用
+      setEncryptionKey(letterResult.clientShare);
       
       // 下書きを削除（正式保存したので）
       if (draftId) {
@@ -476,21 +483,20 @@ export default function CreateLetter() {
             <CardContent className="space-y-8">
               <div className="text-center">
                 {/* タイマー */}
-                <div className="text-6xl font-mono font-bold mb-4">
+                <motion.div 
+                  className="text-6xl font-mono font-bold mb-4"
+                  animate={isRecording && remaining <= 10 ? { scale: [1, 1.05, 1], color: ["inherit", "#ef4444", "inherit"] } : {}}
+                  transition={{ duration: 0.5, repeat: isRecording && remaining <= 10 ? Infinity : 0 }}
+                >
                   {isRecording ? formatDuration(remaining) : formatDuration(MAX_DURATION)}
-                </div>
+                </motion.div>
 
                 {/* 波形アニメーション */}
+                <AudioWaveform isRecording={isRecording} className="mb-4" />
+                
+                {/* プログレスバー */}
                 {isRecording && (
-                  <div className="flex items-center justify-center gap-1 h-12 mb-4">
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="wave-bar w-2 bg-primary rounded-full"
-                        style={{ height: "100%" }}
-                      />
-                    ))}
-                  </div>
+                  <RecordingTimer elapsed={elapsed} remaining={remaining} maxDuration={MAX_DURATION} />
                 )}
 
                 {/* 録音ボタン */}

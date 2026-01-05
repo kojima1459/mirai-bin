@@ -8,6 +8,8 @@ import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
+import { stampHash, generateProofInfo } from "./opentimestamps";
+import { splitKey, combineShares, canProvideServerShare, generateShareInfo } from "./shamir";
 
 export const appRouter = router({
   system: systemRouter,
@@ -59,8 +61,12 @@ export const appRouter = router({
         proofHash: z.string(),
         unlockAt: z.date().optional(),
         unlockPolicy: z.string().optional(),
+        encryptionKey: z.string(), // 復号キー（Shamir分割用）
       }))
       .mutation(async ({ ctx, input }) => {
+        // Shamir分割：復号キーを3つのシェアに分割
+        const shares = await splitKey(input.encryptionKey);
+        
         const letterId = await createLetter({
           authorId: ctx.user.id,
           recipientName: input.recipientName,
@@ -78,8 +84,30 @@ export const appRouter = router({
           unlockPolicy: input.unlockPolicy || "datetime",
           status: "sealed",
           proofCreatedAt: new Date(),
+          // Shamirシェアを保存（clientShareはサーバーに保存しない）
+          serverShare: shares.serverShare,
+          backupShare: shares.backupShare,
+          useShamir: true,
         });
-        return { id: letterId };
+
+        // OpenTimestampsにハッシュを送信（非同期で実行）
+        stampHash(input.proofHash, letterId).then(async (result) => {
+          if (result.success && result.otsFileUrl) {
+            await updateLetter(letterId, {
+              otsFileUrl: result.otsFileUrl,
+              otsStatus: "submitted",
+              otsSubmittedAt: new Date(),
+            });
+            console.log(`[OTS] Letter ${letterId} submitted to OpenTimestamps`);
+          } else {
+            console.warn(`[OTS] Failed to stamp letter ${letterId}:`, result.error);
+          }
+        }).catch((error) => {
+          console.error(`[OTS] Error stamping letter ${letterId}:`, error);
+        });
+
+        // clientShareを返す（URLフラグメントに含める）
+        return { id: letterId, clientShare: shares.clientShare };
       }),
 
     getById: protectedProcedure
@@ -188,14 +216,20 @@ export const appRouter = router({
         // 閲覧数をインクリメント
         await incrementViewCount(letter.id);
         
+        // Shamirシェアの提供判定
+        const shouldProvideServerShare = letter.useShamir && canProvideServerShare(unlockAt);
+        
         if (!canUnlock) {
-          // まだ開封できない
+          // まだ開封できない（サーバーシェアも提供しない）
           return {
             isBot: false,
             canUnlock: false,
             unlockAt: unlockAt?.toISOString(),
             recipientName: letter.recipientName,
             templateUsed: letter.templateUsed,
+            useShamir: letter.useShamir,
+            // サーバーシェアは開封日時前なので提供しない
+            serverShare: null,
           };
         }
         
@@ -205,9 +239,20 @@ export const appRouter = router({
           await unlockLetter(letter.id);
         }
         
+        // 証跡情報を生成
+        const proofInfo = generateProofInfo(
+          letter.proofHash,
+          letter.otsStatus || "pending",
+          letter.otsSubmittedAt || undefined,
+          letter.otsConfirmedAt || undefined
+        );
+        
         return {
           isBot: false,
           canUnlock: true,
+          useShamir: letter.useShamir,
+          // 開封日時後なのでサーバーシェアを提供
+          serverShare: shouldProvideServerShare ? letter.serverShare : null,
           letter: {
             id: letter.id,
             recipientName: letter.recipientName,
@@ -218,6 +263,8 @@ export const appRouter = router({
             createdAt: letter.createdAt.toISOString(),
             unlockAt: unlockAt?.toISOString(),
             unlockedAt: letter.unlockedAt?.toISOString(),
+            proofHash: letter.proofHash,
+            proofInfo,
           },
         };
       }),

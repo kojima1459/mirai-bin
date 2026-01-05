@@ -52,6 +52,12 @@ export const letters = mysqlTable("letters", {
   txHash: varchar("txHash", { length: 66 }),
   proofCreatedAt: timestamp("proofCreatedAt"),
   
+  // OpenTimestamps関連
+  otsFileUrl: varchar("otsFileUrl", { length: 500 }),
+  otsStatus: varchar("otsStatus", { length: 20 }).default("pending"), // pending, submitted, confirmed
+  otsSubmittedAt: timestamp("otsSubmittedAt"),
+  otsConfirmedAt: timestamp("otsConfirmedAt"),
+  
   // 開封関連
   unlockAt: timestamp("unlockAt"),
   unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
@@ -63,10 +69,11 @@ export const letters = mysqlTable("letters", {
   viewCount: int("viewCount").default(0).notNull(),
   lastViewedAt: timestamp("lastViewedAt"),
   
-  // 鍵管理（Day 4で実装）
-  keyShard1: text("keyShard1"),
-  keyShard2: text("keyShard2"),
-  keyShard3: text("keyShard3"),
+  // Shamirシェア（Day 4実装）
+  // clientShareはURLフラグメントに含めるため、サーバーには保存しない
+  serverShare: text("serverShare"),  // 開封日時後にのみ提供
+  backupShare: text("backupShare"),  // バックアップ用
+  useShamir: boolean("useShamir").default(false).notNull(),  // Shamir分割を使用しているか
   
   // メタデータ
   status: varchar("status", { length: 20 }).default("draft").notNull(),

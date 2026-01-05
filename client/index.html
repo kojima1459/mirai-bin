@@ -1,12 +1,36 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>未来便（Mirai-bin）</title>    
+      content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <title>未来便（Mirai-bin）</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="親から子へ、大切な想いを未来に届ける手紙アプリ" />
+    <meta name="theme-color" content="#d97706" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="未来便" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-192x192.png" />
+    
+    <!-- Splash Screens for iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet" />
@@ -19,6 +43,34 @@
       defer
       src="%VITE_ANALYTICS_ENDPOINT%/umami"
       data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('[App] Service Worker registered:', registration.scope);
+              
+              // Check for updates
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // New content is available
+                      console.log('[App] New content available, please refresh.');
+                    }
+                  });
+                }
+              });
+            })
+            .catch((error) => {
+              console.error('[App] Service Worker registration failed:', error);
+            });
+        });
+      }
+    </script>
   </body>
 
 </html>

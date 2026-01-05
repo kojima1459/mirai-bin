@@ -1,0 +1,89 @@
+{
+  "name": "未来便 - Mirai-bin",
+  "short_name": "未来便",
+  "description": "親から子へ、大切な想いを未来に届ける手紙アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffbeb",
+  "theme_color": "#d97706",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "ja",
+  "categories": ["lifestyle", "social"],
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "ホーム画面"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "手紙を書く",
+      "short_name": "新規作成",
+      "description": "新しい手紙を作成します",
+      "url": "/create",
+      "icons": [{ "src": "/icons/shortcut-create.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "下書き",
+      "short_name": "下書き",
+      "description": "下書きを確認します",
+      "url": "/drafts",
+      "icons": [{ "src": "/icons/shortcut-drafts.png", "sizes": "96x96" }]
+    }
+  ],
+  "prefer_related_applications": false
+}
