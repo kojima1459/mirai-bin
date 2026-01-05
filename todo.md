@@ -146,3 +146,17 @@
 ### B: アクセス通知（優先度B）
 - [x] 初回開封時にオーナーに通知（Manus Notification Service経由）
 - [x] 通知内容: 宛先、開封日時のみ（本文はゼロ知識のため含まない）
+
+
+## ローンチ前最終機能
+
+### 1位: 通知先メール設定（優先度A）
+- [x] DBスキーマ: users.notificationEmail追加（nullable）
+- [x] サーバーAPI: user.updateNotificationEmail追加
+- [x] 設定画面UI: Settings.tsx作成（通知先メール入力）
+- [x] 通知ロジック更新: notificationEmail優先、未設定ならアカウントメール
+
+### 2位: 解錠コード再表示制限（優先度B）
+- [x] 再表示ボタン押下時に「PDFで保存済み？」チェック誘導
+- [x] 再表示は1回のみ（2回目以降は警告＋PDF誘導）
+- [ ] 将来: 再発行（新コード・新封筒）の導線を用意

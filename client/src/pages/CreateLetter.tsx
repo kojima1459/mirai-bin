@@ -100,6 +100,7 @@ export default function CreateLetter() {
   const [backupShare, setBackupShare] = useState<string | null>(null);
   const [showUnlockCode, setShowUnlockCode] = useState(false);
   const [showBackupShare, setShowBackupShare] = useState(false);
+  const [unlockCodeViewCount, setUnlockCodeViewCount] = useState(0); // 再表示制限用
 
   // Hooks
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
@@ -997,7 +998,24 @@ export default function CreateLetter() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setShowUnlockCode(!showUnlockCode)}
+                      onClick={() => {
+                        if (!showUnlockCode) {
+                          // 表示する場合
+                          if (unlockCodeViewCount >= 1) {
+                            // 2回目以降は警告を表示
+                            toast.warning("PDFで保存しましたか？", {
+                              description: "解錠コードは一度しか表示できません。PDFで保存してください。",
+                              action: {
+                                label: "PDFをダウンロード",
+                                onClick: () => handleExportPDF(),
+                              },
+                            });
+                            return;
+                          }
+                          setUnlockCodeViewCount(prev => prev + 1);
+                        }
+                        setShowUnlockCode(!showUnlockCode);
+                      }}
                     >
                       {showUnlockCode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>

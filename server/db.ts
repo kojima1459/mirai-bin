@@ -89,6 +89,28 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function updateUserNotificationEmail(userId: number, notificationEmail: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(users).set({ notificationEmail }).where(eq(users.id, userId));
+}
+
+export async function getUserNotificationEmail(userId: number): Promise<string | null> {
+  const db = await getDb();
+  if (!db) {
+    return null;
+  }
+
+  const result = await db.select({ email: users.email, notificationEmail: users.notificationEmail }).from(users).where(eq(users.id, userId)).limit(1);
+  if (result.length === 0) return null;
+  
+  // notificationEmailが設定されていればそれを使用、未設定ならアカウントメールを使用
+  return result[0].notificationEmail || result[0].email || null;
+}
+
 // ============================================
 // Letter Queries
 // ============================================

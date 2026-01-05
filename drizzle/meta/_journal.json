@@ -50,6 +50,13 @@
       "when": 1767636787841,
       "tag": "0006_parallel_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1767649271369,
+      "tag": "0007_square_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

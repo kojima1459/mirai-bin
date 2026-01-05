@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -23,6 +23,35 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  // ============================================
+  // User Settings Router
+  // ============================================
+  user: router({
+    /**
+     * 通知先メールを更新
+     * 未設定（null）ならアカウントメールを使用
+     */
+    updateNotificationEmail: protectedProcedure
+      .input(z.object({
+        notificationEmail: z.string().email().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateUserNotificationEmail(ctx.user.id, input.notificationEmail);
+        return { success: true };
+      }),
+
+    /**
+     * 現在の設定を取得
+     */
+    getSettings: protectedProcedure
+      .query(async ({ ctx }) => {
+        return {
+          notificationEmail: ctx.user.notificationEmail || null,
+          accountEmail: ctx.user.email || null,
+        };
+      }),
   }),
 
   // ============================================

@@ -8,8 +8,15 @@ import { motion } from "framer-motion";
 import { 
   Cake, GraduationCap, Heart, Mail, Loader2, PenLine, 
   School, BookOpen, Star, Briefcase, Baby, HandHeart, FileEdit,
-  Shield, Lock, FileCheck
+  Shield, Lock, FileCheck, Settings, ChevronDown
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -136,9 +143,26 @@ export default function Home() {
                 <Link href="/my-letters">
                   <Button variant="ghost">マイレター</Button>
                 </Link>
-                <span className="text-sm text-muted-foreground">
-                  {user?.name || "ゲスト"}
-                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1">
+                      {user?.name || "ゲスト"}
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <Link href="/settings">
+                      <DropdownMenuItem className="cursor-pointer">
+                        <Settings className="h-4 w-4 mr-2" />
+                        設定
+                      </DropdownMenuItem>
+                    </Link>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-muted-foreground text-xs" disabled>
+                      {user?.email}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             ) : (
               <a href={getLoginUrl()}>
