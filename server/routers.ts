@@ -1,11 +1,17 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates } from "./db";
+import { invokeLLM } from "./_core/llm";
+import { transcribeAudio } from "./_core/voiceTranscription";
+import { storagePut } from "./storage";
+import { nanoid } from "nanoid";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -17,12 +23,204 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  // ============================================
+  // Template Router
+  // ============================================
+  template: router({
+    list: publicProcedure.query(async () => {
+      // Seed templates if not exist
+      await seedTemplates();
+      return await getAllTemplates();
+    }),
+
+    getByName: publicProcedure
+      .input(z.object({ name: z.string() }))
+      .query(async ({ input }) => {
+        return await getTemplateByName(input.name);
+      }),
+  }),
+
+  // ============================================
+  // Letter Router
+  // ============================================
+  letter: router({
+    create: protectedProcedure
+      .input(z.object({
+        recipientName: z.string().optional(),
+        recipientRelation: z.string().optional(),
+        audioUrl: z.string().optional(),
+        audioDuration: z.number().optional(),
+        transcription: z.string().optional(),
+        aiDraft: z.string().optional(),
+        finalContent: z.string(),
+        templateUsed: z.string().optional(),
+        encryptionIv: z.string(),
+        ciphertextUrl: z.string(),
+        proofHash: z.string(),
+        unlockAt: z.date().optional(),
+        unlockPolicy: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const letterId = await createLetter({
+          authorId: ctx.user.id,
+          recipientName: input.recipientName,
+          recipientRelation: input.recipientRelation,
+          audioUrl: input.audioUrl,
+          audioDuration: input.audioDuration,
+          transcription: input.transcription,
+          aiDraft: input.aiDraft,
+          finalContent: input.finalContent,
+          templateUsed: input.templateUsed,
+          encryptionIv: input.encryptionIv,
+          ciphertextUrl: input.ciphertextUrl,
+          proofHash: input.proofHash,
+          unlockAt: input.unlockAt,
+          unlockPolicy: input.unlockPolicy || "datetime",
+          status: "sealed",
+          proofCreatedAt: new Date(),
+        });
+        return { id: letterId };
+      }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.id);
+        if (!letter) return null;
+        // Only author can view their own letters
+        if (letter.authorId !== ctx.user.id) return null;
+        return letter;
+      }),
+
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return await getLettersByAuthor(ctx.user.id);
+    }),
+
+    cancel: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.id);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        if (letter.isUnlocked) throw new Error("Cannot cancel an unlocked letter");
+        
+        await updateLetter(input.id, { status: "canceled" });
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.id);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        await deleteLetter(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================
+  // AI Router
+  // ============================================
+  ai: router({
+    transcribe: protectedProcedure
+      .input(z.object({
+        audioUrl: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await transcribeAudio({
+          audioUrl: input.audioUrl,
+          language: "ja",
+          prompt: "親が子どもに宛てた手紙の録音",
+        });
+        
+        // Check if it's an error
+        if ('error' in result) {
+          console.error("[Transcribe] Error:", result);
+          throw new Error(result.error);
+        }
+        
+        return {
+          text: result.text,
+          language: result.language,
+        };
+      }),
+
+    generateDraft: protectedProcedure
+      .input(z.object({
+        transcription: z.string(),
+        templateName: z.string(),
+        recipientName: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const template = await getTemplateByName(input.templateName);
+        if (!template) {
+          throw new Error("Template not found");
+        }
+
+        // Replace placeholder in prompt
+        let prompt = template.prompt.replace("{{transcription}}", input.transcription);
+        if (input.recipientName) {
+          prompt = prompt.replace("子ども", input.recipientName);
+        }
+
+        try {
+          const response = await invokeLLM({
+            messages: [
+              { role: "system", content: "あなたは親が子どもに宛てた手紙を書くアシスタントです。温かく、愛情のこもった手紙を作成してください。" },
+              { role: "user", content: prompt },
+            ],
+          });
+
+          const content = response.choices[0]?.message?.content;
+          // contentが文字列の場合はそのまま、配列の場合はtextを抽出
+          let draft = "";
+          if (typeof content === "string") {
+            draft = content;
+          } else if (Array.isArray(content)) {
+            draft = content
+              .filter((c): c is { type: "text"; text: string } => c.type === "text")
+              .map((c) => c.text)
+              .join("");
+          }
+          return { draft };
+        } catch (error) {
+          console.error("[GenerateDraft] Error:", error);
+          throw new Error("下書きの生成に失敗しました");
+        }
+      }),
+  }),
+
+  // ============================================
+  // Storage Router
+  // ============================================
+  storage: router({
+    uploadAudio: protectedProcedure
+      .input(z.object({
+        audioBase64: z.string(),
+        mimeType: z.string().default("audio/webm"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const buffer = Buffer.from(input.audioBase64, "base64");
+        const fileKey = `audio/${ctx.user.id}/${nanoid()}.webm`;
+        
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        return { url, key: fileKey };
+      }),
+
+    uploadCiphertext: protectedProcedure
+      .input(z.object({
+        ciphertextBase64: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const buffer = Buffer.from(input.ciphertextBase64, "base64");
+        const fileKey = `ciphertext/${ctx.user.id}/${nanoid()}.enc`;
+        
+        const { url } = await storagePut(fileKey, buffer, "application/octet-stream");
+        return { url, key: fileKey };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
