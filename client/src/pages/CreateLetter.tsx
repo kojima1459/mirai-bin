@@ -46,6 +46,7 @@ import {
   FileText
 } from "lucide-react";
 import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
+import { TemplateAccordion } from "@/components/TemplateAccordion";
 import { motion } from "framer-motion";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -667,32 +668,15 @@ export default function CreateLetter() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
+              ) : templates && templates.length > 0 ? (
+                <TemplateAccordion
+                  templates={templates}
+                  selectedTemplate={selectedTemplate}
+                  onSelect={setSelectedTemplate}
+                />
               ) : (
-                <div className="grid gap-4">
-                  {templates?.map((template) => (
-                    <div
-                      key={template.id}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                        selectedTemplate === template.name
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                      onClick={() => setSelectedTemplate(template.name)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                          {iconMap[template.icon || ""] || <Mail className="h-6 w-6" />}
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{template.displayName}</h3>
-                          <p className="text-sm text-muted-foreground">{template.description}</p>
-                        </div>
-                        {selectedTemplate === template.name && (
-                          <Check className="h-5 w-5 text-primary" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>テンプレートがありません</p>
                 </div>
               )}
 

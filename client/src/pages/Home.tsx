@@ -1,14 +1,14 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { motion } from "framer-motion";
 import { 
   Cake, GraduationCap, Heart, Mail, Loader2, PenLine, 
   School, BookOpen, Star, Briefcase, Baby, HandHeart, FileEdit,
-  Shield, Lock, FileCheck, Settings, ChevronDown
+  Shield, Lock, FileCheck, Settings, ChevronDown, Sparkles,
+  Sun, Wallet, Map, CloudRain, Frown, Angry, Users, ThumbsDown,
+  BatteryLow, DoorOpen, Compass, Search
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -17,47 +17,57 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
+import { useState, useMemo } from "react";
 
+// アイコンマップ（拡張版）
 const iconMap: Record<string, React.ReactNode> = {
-  cake: <Cake className="h-8 w-8" />,
-  "graduation-cap": <GraduationCap className="h-8 w-8" />,
-  heart: <Heart className="h-8 w-8" />,
-  school: <School className="h-8 w-8" />,
-  "book-open": <BookOpen className="h-8 w-8" />,
-  star: <Star className="h-8 w-8" />,
-  briefcase: <Briefcase className="h-8 w-8" />,
-  baby: <Baby className="h-8 w-8" />,
-  "hand-heart": <HandHeart className="h-8 w-8" />,
-  mail: <Mail className="h-8 w-8" />,
+  cake: <Cake className="h-5 w-5" />,
+  "graduation-cap": <GraduationCap className="h-5 w-5" />,
+  heart: <Heart className="h-5 w-5" />,
+  school: <School className="h-5 w-5" />,
+  "book-open": <BookOpen className="h-5 w-5" />,
+  star: <Star className="h-5 w-5" />,
+  briefcase: <Briefcase className="h-5 w-5" />,
+  baby: <Baby className="h-5 w-5" />,
+  "hand-heart": <HandHeart className="h-5 w-5" />,
+  mail: <Mail className="h-5 w-5" />,
+  sparkles: <Sparkles className="h-5 w-5" />,
+  sun: <Sun className="h-5 w-5" />,
+  wallet: <Wallet className="h-5 w-5" />,
+  map: <Map className="h-5 w-5" />,
+  shield: <Shield className="h-5 w-5" />,
+  "cloud-rain": <CloudRain className="h-5 w-5" />,
+  frown: <Frown className="h-5 w-5" />,
+  angry: <Angry className="h-5 w-5" />,
+  users: <Users className="h-5 w-5" />,
+  "thumbs-down": <ThumbsDown className="h-5 w-5" />,
+  "battery-low": <BatteryLow className="h-5 w-5" />,
+  "door-open": <DoorOpen className="h-5 w-5" />,
+  compass: <Compass className="h-5 w-5" />,
 };
 
-// テンプレートをカテゴリ別に分類
-const templateCategories: Record<string, { title: string; templates: string[] }> = {
-  childhood: {
-    title: "幼少期〜小学校",
-    templates: ["10years", "elementary-graduation"],
-  },
-  junior: {
-    title: "中学校",
-    templates: ["junior-high-entrance", "junior-high-graduation"],
-  },
-  senior: {
-    title: "高校〜大学",
-    templates: ["high-school-entrance", "high-school-graduation", "university-entrance"],
-  },
-  adult: {
-    title: "成人〜社会人",
-    templates: ["coming-of-age", "first-job"],
-  },
-  life: {
-    title: "人生の節目",
-    templates: ["first-love", "wedding-day", "becoming-parent"],
-  },
-  special: {
-    title: "特別な日",
-    templates: ["difficult-times", "someday"],
-  },
+// カテゴリの色設定
+const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
+  emotion: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  "parent-truth": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+  ritual: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
+  milestone: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
+};
+
+const categoryLabels: Record<string, string> = {
+  emotion: "感情サポート",
+  "parent-truth": "親の本音",
+  ritual: "未来の儀式",
+  milestone: "人生の節目",
 };
 
 // アニメーション設定
@@ -75,15 +85,41 @@ const staggerContainer = {
   }
 };
 
-const scaleIn = {
-  initial: { opacity: 0, scale: 0.9 },
-  animate: { opacity: 1, scale: 1 },
-  transition: { duration: 0.5 }
-};
-
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // おすすめテンプレート（isRecommended=true）
+  const recommendedTemplates = useMemo(() => {
+    if (!templates) return [];
+    return templates.filter(t => t.isRecommended).slice(0, 3);
+  }, [templates]);
+
+  // フィルタリングされたテンプレート
+  const filteredTemplates = useMemo(() => {
+    if (!templates) return [];
+    return templates.filter(t => {
+      const matchesSearch = searchQuery === "" || 
+        t.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.subtitle?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === null || t.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [templates, searchQuery, selectedCategory]);
+
+  // カテゴリ別にグループ化
+  const groupedTemplates = useMemo(() => {
+    const groups: Record<string, typeof filteredTemplates> = {};
+    filteredTemplates.forEach(t => {
+      const cat = t.category || "milestone";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(t);
+    });
+    return groups;
+  }, [filteredTemplates]);
 
   if (authLoading) {
     return (
@@ -101,12 +137,100 @@ export default function Home() {
     );
   }
 
-  // テンプレートをカテゴリ別にグループ化
-  const getTemplatesByCategory = (categoryKey: string) => {
-    if (!templates) return [];
-    const category = templateCategories[categoryKey];
-    if (!category) return [];
-    return templates.filter(t => category.templates.includes(t.name));
+  // 録音ガイドをパース
+  const parseRecordingGuide = (guide: string | null | undefined): string[] => {
+    if (!guide) return [];
+    try {
+      return JSON.parse(guide);
+    } catch {
+      return [];
+    }
+  };
+
+  // テンプレートアコーディオンアイテム
+  const TemplateAccordionItem = ({ template, isRecommended = false }: { 
+    template: NonNullable<typeof templates>[number]; 
+    isRecommended?: boolean;
+  }) => {
+    const colors = categoryColors[template.category || "milestone"] || categoryColors.milestone;
+    const recordingGuide = parseRecordingGuide(template.recordingGuide);
+
+    return (
+      <AccordionItem 
+        value={template.name} 
+        className={`border rounded-lg mb-3 ${colors.border} ${colors.bg} overflow-hidden`}
+      >
+        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-white/50 transition-colors">
+          <div className="flex items-center gap-3 flex-1 text-left">
+            <div className={`w-10 h-10 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 border ${colors.border}`}>
+              {iconMap[template.icon || ""] || <Mail className="h-5 w-5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-foreground">{template.displayName}</span>
+                {isRecommended && (
+                  <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-xs">
+                    おすすめ
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground truncate">
+                {template.subtitle || template.description}
+              </p>
+            </div>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pb-4">
+          <div className="bg-white/70 rounded-lg p-4 space-y-4">
+            {/* 録音ガイド（90秒で話す順番） */}
+            {recordingGuide.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-foreground mb-2">
+                  📝 90秒で話す順番
+                </h4>
+                <ol className="space-y-1.5">
+                  {recordingGuide.map((step, i) => (
+                    <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                      <span className={`w-5 h-5 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 text-xs font-medium`}>
+                        {i + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* 一言例 */}
+            {template.exampleOneLiner && (
+              <div className="border-l-2 border-amber-300 pl-3 py-1">
+                <p className="text-sm italic text-muted-foreground">
+                  「{template.exampleOneLiner}」
+                </p>
+              </div>
+            )}
+
+            {/* CTAボタン */}
+            <div className="pt-2">
+              {isAuthenticated ? (
+                <Link href={`/create?template=${template.name}`}>
+                  <Button className="w-full">
+                    <PenLine className="mr-2 h-4 w-4" />
+                    このテンプレートで手紙を書く
+                  </Button>
+                </Link>
+              ) : (
+                <a href={getLoginUrl()}>
+                  <Button className="w-full">
+                    ログインして手紙を書く
+                  </Button>
+                </a>
+              )}
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    );
   };
 
   return (
@@ -175,7 +299,6 @@ export default function Home() {
 
       {/* ヒーローセクション */}
       <section className="py-20 md:py-32 relative overflow-hidden">
-        {/* 背景のグラデーションアニメーション */}
         <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50" />
         <motion.div 
           className="absolute inset-0 opacity-30"
@@ -325,96 +448,134 @@ export default function Home() {
         </div>
       </section>
 
-      {/* テンプレートセクション */}
+      {/* テンプレートセクション（アコーディオン形式） */}
       <section className="py-16">
-        <div className="container">
+        <div className="container max-w-3xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-12"
+            className="text-center mb-8"
           >
             <h2 className="text-2xl md:text-3xl font-bold mb-4">
-              テンプレート
+              テンプレートを選ぶ
             </h2>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-muted-foreground">
               子どもの人生の節目に届ける、親からの想い
             </p>
-            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-              たとえ自分がいなくなっても、大切な想いは確実に届きます。
-              <br />
-              子どもの成長の節目に、あなたの言葉を届けましょう。
-            </p>
           </motion.div>
-          
+
           {templatesLoading ? (
-            <div className="flex justify-center">
+            <div className="flex justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
-            <Tabs defaultValue="childhood" className="max-w-6xl mx-auto">
-              <TabsList className="grid grid-cols-3 md:grid-cols-6 mb-8 h-auto">
-                {Object.entries(templateCategories).map(([key, category]) => (
-                  <TabsTrigger key={key} value={key} className="text-xs md:text-sm py-2">
-                    {category.title}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              
-              {Object.keys(templateCategories).map((categoryKey) => (
-                <TabsContent key={categoryKey} value={categoryKey}>
-                  <motion.div 
-                    className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
-                    variants={staggerContainer}
-                    initial="initial"
-                    animate="animate"
-                  >
-                    {getTemplatesByCategory(categoryKey).map((template, index) => (
-                      <motion.div
-                        key={template.id}
-                        variants={scaleIn}
-                        custom={index}
-                      >
-                        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full">
-                          <CardHeader className="text-center">
-                            <motion.div 
-                              className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4"
-                              whileHover={{ scale: 1.1, rotate: 10 }}
-                              transition={{ type: "spring", stiffness: 300 }}
-                            >
-                              {iconMap[template.icon || ""] || <Mail className="h-8 w-8" />}
-                            </motion.div>
-                            <CardTitle className="text-lg">{template.displayName}</CardTitle>
-                            <CardDescription>{template.description}</CardDescription>
-                          </CardHeader>
-                          <CardContent className="text-center">
-                            <p className="text-sm text-muted-foreground italic mb-4">
-                              「{template.exampleOneLiner}」
-                            </p>
-                            {isAuthenticated ? (
-                              <Link href={`/create?template=${template.name}`}>
-                                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                                  <Button variant="outline" className="w-full">
-                                    このテンプレートで書く
-                                  </Button>
-                                </motion.div>
-                              </Link>
-                            ) : (
-                              <a href={getLoginUrl()}>
-                                <Button variant="outline" className="w-full">
-                                  ログインして書く
-                                </Button>
-                              </a>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </motion.div>
+            <div className="space-y-8">
+              {/* おすすめ3選 */}
+              {recommendedTemplates.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Star className="h-5 w-5 text-amber-500" />
+                    <h3 className="font-semibold text-lg">おすすめ</h3>
+                  </div>
+                  <Accordion type="single" collapsible className="space-y-0">
+                    {recommendedTemplates.map(template => (
+                      <TemplateAccordionItem 
+                        key={template.id} 
+                        template={template} 
+                        isRecommended={true}
+                      />
                     ))}
-                  </motion.div>
-                </TabsContent>
+                  </Accordion>
+                </motion.div>
+              )}
+
+              {/* 検索・フィルター */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="space-y-4"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="font-semibold text-lg">すべてのテンプレート</span>
+                  <Badge variant="outline">{filteredTemplates.length}件</Badge>
+                </div>
+
+                {/* 検索ボックス */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="テンプレートを検索..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+
+                {/* カテゴリフィルター */}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedCategory === null ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory(null)}
+                  >
+                    すべて
+                  </Button>
+                  {Object.entries(categoryLabels).map(([key, label]) => {
+                    const colors = categoryColors[key];
+                    return (
+                      <Button
+                        key={key}
+                        variant={selectedCategory === key ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedCategory(selectedCategory === key ? null : key)}
+                        className={selectedCategory !== key ? `${colors.bg} ${colors.text} border ${colors.border} hover:${colors.bg}` : ""}
+                      >
+                        {label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+
+              {/* カテゴリ別テンプレート一覧 */}
+              {Object.entries(groupedTemplates).map(([category, categoryTemplates]) => (
+                <motion.div
+                  key={category}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge className={`${categoryColors[category]?.bg} ${categoryColors[category]?.text} border ${categoryColors[category]?.border}`}>
+                      {categoryLabels[category] || category}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">{categoryTemplates.length}件</span>
+                  </div>
+                  <Accordion type="single" collapsible className="space-y-0">
+                    {categoryTemplates.map(template => (
+                      <TemplateAccordionItem 
+                        key={template.id} 
+                        template={template}
+                      />
+                    ))}
+                  </Accordion>
+                </motion.div>
               ))}
-            </Tabs>
+
+              {/* 検索結果なし */}
+              {filteredTemplates.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>該当するテンプレートが見つかりませんでした</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </section>

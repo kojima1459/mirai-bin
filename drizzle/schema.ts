@@ -97,16 +97,27 @@ export type InsertLetter = typeof letters.$inferInsert;
 
 /**
  * テンプレートテーブル
+ * 
+ * アコーディオンUI対応:
+ * - category: 感情/親の本音/儀式
+ * - subtitle: 1行説明（開かなくても選べる）
+ * - recordingGuide: 90秒で話す順番（3ステップ）
+ * - isRecommended: おすすめ3つに固定表示
  */
 export const templates = mysqlTable("templates", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 50 }).notNull().unique(),
   displayName: varchar("displayName", { length: 100 }).notNull(),
+  subtitle: varchar("subtitle", { length: 200 }), // 1行説明
   description: text("description"),
+  category: varchar("category", { length: 50 }).default("emotion").notNull(), // emotion/parent-truth/ritual/milestone
   prompt: text("prompt").notNull(),
   recordingPrompt: text("recordingPrompt").notNull(),
+  recordingGuide: text("recordingGuide"), // 90秒で話す順番（JSON）
   exampleOneLiner: text("exampleOneLiner"),
   icon: varchar("icon", { length: 50 }),
+  isRecommended: boolean("isRecommended").default(false).notNull(), // おすすめ3つ
+  sortOrder: int("sortOrder").default(100).notNull(), // 表示順
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

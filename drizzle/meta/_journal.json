@@ -57,6 +57,13 @@
       "when": 1767649271369,
       "tag": "0007_square_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1767650032897,
+      "tag": "0008_happy_mandrill",
+      "breakpoints": true
     }
   ]
 }
