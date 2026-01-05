@@ -519,7 +519,15 @@ export default function Home() {
           >
             <p>© 2025 未来便（Mirai-bin）</p>
             <p className="mt-2">大切な想いを、未来へ届ける</p>
-            <div className="mt-4 flex justify-center gap-4">
+            <div className="mt-4 flex justify-center gap-4 flex-wrap">
+              <Link href="/how-to-use" className="hover:text-primary transition-colors">
+                使い方
+              </Link>
+              <span>・</span>
+              <Link href="/faq" className="hover:text-primary transition-colors">
+                注意点・FAQ
+              </Link>
+              <span>・</span>
               <Link href="/privacy" className="hover:text-primary transition-colors">
                 プライバシーポリシー
               </Link>
