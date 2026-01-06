@@ -15,7 +15,8 @@ import {
   PenLine,
   Lock,
   Clock,
-  Trash2
+  Trash2,
+  ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -100,7 +101,11 @@ export default function MyLetters() {
         {letters && letters.length > 0 ? (
           <div className="space-y-4">
             {letters.map((letter) => (
-              <Card key={letter.id} className="hover:shadow-md transition-shadow">
+              <Card 
+                key={letter.id} 
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => navigate(`/letter/${letter.id}`)}
+              >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -122,7 +127,12 @@ export default function MyLetters() {
                     </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -160,9 +170,12 @@ export default function MyLetters() {
                     </div>
                   </div>
                   {/* ゼロ知識設計: サーバーに本文を保存しないため、プレビューは表示しない */}
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    暗号化された手紙（運営者も読めません）
-                  </p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      暗号化された手紙（運営者も読めません）
+                    </p>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
                 </CardContent>
               </Card>
             ))}

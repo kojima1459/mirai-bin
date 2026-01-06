@@ -160,3 +160,33 @@ describe("storage router", () => {
     });
   });
 });
+
+
+describe("letter.updateSchedule", () => {
+  it("requires authentication", async () => {
+    const { ctx } = createUnauthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.letter.updateSchedule({
+        letterId: 1,
+        unlockAt: new Date().toISOString(),
+      })
+    ).rejects.toThrow();
+  });
+
+  it("requires valid letterId", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    try {
+      await caller.letter.updateSchedule({
+        letterId: 999999,
+        unlockAt: new Date().toISOString(),
+      });
+      expect.fail("Should have thrown an error");
+    } catch (error) {
+      expect(error).toBeDefined();
+    }
+  });
+});

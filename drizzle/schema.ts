@@ -195,3 +195,38 @@ export const letterReminders = mysqlTable("letter_reminders", {
 
 export type LetterReminder = typeof letterReminders.$inferSelect;
 export type InsertLetterReminder = typeof letterReminders.$inferInsert;
+
+/**
+ * 共有トークンテーブル
+ * 
+ * 共有リンクの失効・再発行（Revocation / Rotation）対応:
+ * - 1手紙に対して複数のトークン履歴を持てる
+ * - status: active（有効）, revoked（無効化）, rotated（置換済み）
+ * - activeなトークンは常に最大1件
+ * - 無効化/置換されたトークンは410を返す
+ */
+export const letterShareTokens = mysqlTable("letter_share_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  letterId: int("letterId").notNull(),
+  
+  // ステータス: active（有効）, revoked（無効化）, rotated（置換済み）
+  status: varchar("status", { length: 20 }).default("active").notNull(),
+  
+  // 置換時の新トークン（rotated時のみ）
+  replacedByToken: varchar("replacedByToken", { length: 64 }),
+  
+  // 失効理由（任意）
+  revokeReason: varchar("revokeReason", { length: 255 }),
+  
+  // アクセス統計
+  viewCount: int("viewCount").default(0).notNull(),
+  lastAccessedAt: timestamp("lastAccessedAt"),
+  
+  // タイムスタンプ
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  revokedAt: timestamp("revokedAt"),
+});
+
+export type LetterShareToken = typeof letterShareTokens.$inferSelect;
+export type InsertLetterShareToken = typeof letterShareTokens.$inferInsert;

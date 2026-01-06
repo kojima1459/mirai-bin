@@ -14,6 +14,7 @@ import Terms from "./pages/Terms";
 import HowToUse from "./pages/HowToUse";
 import FAQ from "./pages/FAQ";
 import Settings from "./pages/Settings";
+import LetterDetail from "./pages/LetterDetail";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/create"} component={CreateLetter} />
       <Route path={"/my-letters"} component={MyLetters} />
+      <Route path={"/letter/:id"} component={LetterDetail} />
       <Route path={"/share/:token"} component={ShareLetter} />
       <Route path={"/drafts"} component={Drafts} />
       <Route path={"/privacy"} component={Privacy} />

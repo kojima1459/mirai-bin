@@ -1,6 +1,6 @@
 import { eq, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, letters, templates, drafts, letterReminders, InsertLetter, InsertTemplate, InsertDraft, InsertLetterReminder, Letter, Template, Draft, LetterReminder } from "../drizzle/schema";
+import { InsertUser, users, letters, templates, drafts, letterReminders, letterShareTokens, InsertLetter, InsertTemplate, InsertDraft, InsertLetterReminder, Letter, Template, Draft, LetterReminder, LetterShareToken, InsertLetterShareToken } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -804,7 +804,11 @@ export async function markReminderAsFailed(reminderId: number, error: string): P
 }
 
 /**
- * 手紙のリマインダー設定を更新
+ * 手紙のリマインダーを更新（未送信のみ再計算、送信済みは保持）
+ * @param letterId 手紙ID
+ * @param ownerUserId オーナーユーザーID
+ * @param unlockAt 新しい開封日時
+ * @param daysBeforeList X日前のリスト（例: [90, 30, 7, 1]）
  */
 export async function updateLetterReminders(
   letterId: number,
@@ -812,7 +816,48 @@ export async function updateLetterReminders(
   unlockAt: Date,
   daysBeforeList: number[]
 ): Promise<void> {
-  await createRemindersForLetter(letterId, ownerUserId, unlockAt, daysBeforeList);
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  // 既存のリマインダーを取得
+  const existingReminders = await db.select().from(letterReminders)
+    .where(eq(letterReminders.letterId, letterId));
+
+  // 送信済みのリマインダーを保持
+  const sentReminders = existingReminders.filter(r => r.status === "sent");
+  const sentDaysBefore = new Set(sentReminders.map(r => r.daysBefore));
+
+  // 未送信のリマインダーを削除
+  await db.delete(letterReminders).where(and(
+    eq(letterReminders.letterId, letterId),
+    eq(letterReminders.status, "pending")
+  ));
+
+  // 新しいリマインダーを作成（送信済みでないもののみ）
+  for (const daysBefore of daysBeforeList) {
+    // 既に送信済みの日数はスキップ
+    if (sentDaysBefore.has(daysBefore)) {
+      continue;
+    }
+
+    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1000);
+    
+    // 過去の日付はスキップ
+    if (scheduledAt <= new Date()) {
+      continue;
+    }
+
+    await db.insert(letterReminders).values({
+      letterId,
+      ownerUserId,
+      type: "before_unlock",
+      daysBefore,
+      scheduledAt,
+      status: "pending",
+    });
+  }
 }
 
 /**
@@ -825,4 +870,185 @@ export async function deleteRemindersByLetterId(letterId: number): Promise<void>
   }
 
   await db.delete(letterReminders).where(eq(letterReminders.letterId, letterId));
+}
+
+
+// ============================================
+// 共有トークン関連（失効・再発行対応）
+// ============================================
+
+/**
+ * トークンで共有トークンレコードを取得
+ */
+export async function getShareTokenRecord(token: string): Promise<LetterShareToken | undefined> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.select().from(letterShareTokens).where(eq(letterShareTokens.token, token)).limit(1);
+  return result[0];
+}
+
+/**
+ * 手紙IDでアクティブな共有トークンを取得
+ */
+export async function getActiveShareToken(letterId: number): Promise<LetterShareToken | undefined> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.select()
+    .from(letterShareTokens)
+    .where(and(
+      eq(letterShareTokens.letterId, letterId),
+      eq(letterShareTokens.status, "active")
+    ))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * 新しい共有トークンを作成
+ */
+export async function createShareToken(letterId: number, token: string): Promise<{ success: boolean; token: string }> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  // 既存のactiveトークンがあれば先に無効化（常に1つだけactiveを保証）
+  const existingActive = await getActiveShareToken(letterId);
+  if (existingActive) {
+    await db.update(letterShareTokens)
+      .set({
+        status: "rotated",
+        revokedAt: new Date(),
+        replacedByToken: token,
+      })
+      .where(eq(letterShareTokens.id, existingActive.id));
+  }
+  
+  await db.insert(letterShareTokens).values({
+    token,
+    letterId,
+    status: "active",
+    viewCount: 0,
+  });
+  return { success: true, token };
+}
+
+/**
+ * 共有トークンを無効化（revoke）
+ * - activeなトークンをrevokedに変更
+ * - 既にrevokedなら何もしない（idempotent）
+ */
+export async function revokeShareToken(letterId: number, reason?: string): Promise<{ success: boolean; wasActive: boolean }> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  // activeなトークンを取得
+  const activeToken = await getActiveShareToken(letterId);
+  if (!activeToken) {
+    // activeなトークンがない（既にrevoked/rotatedか、まだ作成されていない）
+    return { success: true, wasActive: false };
+  }
+
+  // 原子的更新: status=activeの場合のみ更新
+  await db.update(letterShareTokens)
+    .set({
+      status: "revoked",
+      revokedAt: new Date(),
+      revokeReason: reason || null,
+    })
+    .where(and(
+      eq(letterShareTokens.id, activeToken.id),
+      eq(letterShareTokens.status, "active")
+    ));
+
+  return { success: true, wasActive: true };
+}
+
+/**
+ * 共有トークンを再発行（rotate）
+ * - activeなトークンをrotatedに変更
+ * - 新しいactiveトークンを作成
+ * - activeなトークンがない場合は新規作成
+ */
+export async function rotateShareToken(letterId: number, newToken: string): Promise<{ success: boolean; newToken: string; oldToken?: string }> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  // activeなトークンを取得
+  const activeToken = await getActiveShareToken(letterId);
+  
+  if (activeToken) {
+    // 既存のactiveトークンをrotatedに変更
+    await db.update(letterShareTokens)
+      .set({
+        status: "rotated",
+        revokedAt: new Date(),
+        replacedByToken: newToken,
+      })
+      .where(and(
+        eq(letterShareTokens.id, activeToken.id),
+        eq(letterShareTokens.status, "active")
+      ));
+  }
+
+  // 新しいactiveトークンを作成
+  await createShareToken(letterId, newToken);
+
+  return {
+    success: true,
+    newToken,
+    oldToken: activeToken?.token,
+  };
+}
+
+/**
+ * 共有トークンのアクセス統計を更新
+ */
+export async function incrementShareTokenViewCount(token: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const tokenRecord = await getShareTokenRecord(token);
+  if (!tokenRecord) return;
+
+  await db.update(letterShareTokens)
+    .set({
+      viewCount: tokenRecord.viewCount + 1,
+      lastAccessedAt: new Date(),
+    })
+    .where(eq(letterShareTokens.token, token));
+}
+
+/**
+ * 既存のletters.shareTokenをletterShareTokensに移行
+ * - 既にletterShareTokensにactiveなトークンがあればスキップ
+ * - letters.shareTokenが存在すればactiveとして移行
+ */
+export async function migrateShareTokenIfNeeded(letterId: number, legacyToken: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  // 既にactiveなトークンがあればスキップ
+  const existingActive = await getActiveShareToken(letterId);
+  if (existingActive) return;
+
+  // 既に同じトークンが存在するかチェック
+  const existingToken = await getShareTokenRecord(legacyToken);
+  if (existingToken) return;
+
+  // 移行: letters.shareTokenをactiveとして追加
+  await createShareToken(letterId, legacyToken);
 }

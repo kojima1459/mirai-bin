@@ -259,3 +259,63 @@
 - [x] reminder生成テスト（unlockAtからscheduledAt計算）
 - [x] 二重送信防止テスト
 - [x] markReminderAsSent/markReminderAsFailedテスト
+
+
+## 1. 共有リンクの失効・再発行（Revocation / Rotation） ✅ 完了
+
+### DBスキーマ
+- [x] letterShareTokensテーブル追加（token, letterId, status, createdAt, revokedAt, replacedByToken）
+- [x] status enum: active | revoked | rotated
+- [x] 既存letters.shareTokenからの移行
+
+### サーバーAPI
+- [x] letter.revokeShareLink（共有リンク無効化）
+- [x] letter.rotateShareLink（共有リンク再発行）
+- [x] getByShareToken更新（token状態チェック: active/revoked/rotated）
+- [x] 410レスポンス（無効化/置換済み）
+
+### フロントエンドUI
+- [x] 「共有リンクを無効化」ボタン（確認ダイアログ必須）
+- [x] 「共有リンクを再発行」ボタン（確認ダイアログ必須）
+- [x] revoke後「共有停止中」表示
+- [x] rotate後の新リンクコピーUI
+
+### テスト
+- [x] active tokenで取得できる
+- [x] revoke後は410
+- [x] rotate後：旧tokenは410、新tokenはOK
+- [x] activeは常に1件
+
+
+## 2. 開封日・通知スケジュールの変更 ✅ 完了
+
+### サーバーAPI
+- [x] letter.updateSchedule（unlockAt, remindersEnabled, reminderDaysBefore[]）
+- [x] unlockAt変更時のリマインダー再計算
+- [x] 送信済みリマインダーは保持
+- [x] openedAt存在時は変更禁止（既に開封済みの手紙はスケジュール変更不可）
+
+### フロントエンドUI
+- [x] 手紙詳細画面に「スケジュール設定」セクション
+- [x] 開封日時picker（datetime-local）
+- [x] リマインダーON/OFF
+- [x] daysBefore選択（90/30/7/1日前）
+- [x] 開封済みの場合は編集不可表示
+
+### テスト
+- [x] pending remindersのscheduledAtが再計算される
+- [x] sent済みremindersは保持される
+- [x] updateSchedule APIの認証テスト
+
+
+## 3. アカウント喪失/引き継ぎ対策
+
+### メール変更
+- [ ] user.updateEmail API
+- [ ] 確認メール送信
+- [ ] 設定画面UI
+
+### 引き継ぎ手順ページ
+- [ ] /account-recovery ページ作成
+- [ ] 配偶者に渡せる説明
+- [ ] PDF保管の重要性を強調

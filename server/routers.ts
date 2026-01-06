@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId, getShareTokenRecord, getActiveShareToken, createShareToken, revokeShareToken, rotateShareToken, incrementShareTokenViewCount, migrateShareTokenIfNeeded } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -214,16 +214,157 @@ export const appRouter = router({
         if (!letter) throw new Error("Letter not found");
         if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
         
-        // 既に共有トークンがあればそれを返す
+        // 既にactiveな共有トークンがあればそれを返す
+        const existingToken = await getActiveShareToken(input.id);
+        if (existingToken) {
+          return { shareToken: existingToken.token };
+        }
+        
+        // 既存のletters.shareTokenがあれば移行
         if (letter.shareToken) {
+          await migrateShareTokenIfNeeded(input.id, letter.shareToken);
           return { shareToken: letter.shareToken };
         }
         
         // 新しい共有トークンを生成
         const shareToken = nanoid(21);
+        await createShareToken(input.id, shareToken);
+        // 互換性のためletters.shareTokenも更新
         await updateLetterShareToken(input.id, shareToken);
         
         return { shareToken };
+      }),
+
+    /**
+     * 共有リンクを無効化（revoke）
+     * - 漏洩事故時に即座に止血できる
+     * - 無効化されたトークンは410を返す
+     */
+    revokeShareLink: protectedProcedure
+      .input(z.object({ 
+        letterId: z.number(),
+        reason: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.letterId);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        // 既存のletters.shareTokenがあれば先に移行
+        if (letter.shareToken) {
+          await migrateShareTokenIfNeeded(input.letterId, letter.shareToken);
+        }
+        
+        const result = await revokeShareToken(input.letterId, input.reason);
+        return { success: result.success, wasActive: result.wasActive };
+      }),
+
+    /**
+     * 共有リンクを再発行（rotate）
+     * - 旧トークンは無効化され、新トークンが発行される
+     * - 旧トークンでアクセスすると410が返る
+     */
+    rotateShareLink: protectedProcedure
+      .input(z.object({ letterId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.letterId);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        // 既存のletters.shareTokenがあれば先に移行
+        if (letter.shareToken) {
+          await migrateShareTokenIfNeeded(input.letterId, letter.shareToken);
+        }
+        
+        // 新しいトークンを生成して再発行
+        const newToken = nanoid(21);
+        const result = await rotateShareToken(input.letterId, newToken);
+        
+        // 互換性のためletters.shareTokenも更新
+        await updateLetterShareToken(input.letterId, newToken);
+        
+        return { 
+          success: result.success, 
+          newShareToken: result.newToken,
+          oldShareToken: result.oldToken,
+        };
+      }),
+
+    /**
+     * 開封日時とリマインダースケジュールを更新
+     * - unlockAtを変更すると未送信のreminderのscheduledAtも再計算
+     * - 既に開封済み（openedAtがある）の場合は変更不可
+     */
+    updateSchedule: protectedProcedure
+      .input(z.object({
+        letterId: z.number(),
+        unlockAt: z.string().optional(), // ISO8601
+        reminderDaysBeforeList: z.array(z.number()).optional(), // [90, 30, 7, 1]
+        reminderEnabled: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.letterId);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        // 既に開封済みの場合は変更不可
+        if (letter.unlockedAt) {
+          throw new Error("既に開封された手紙の開封日時は変更できません");
+        }
+        
+        // unlockAtの更新
+        let newUnlockAt = letter.unlockAt;
+        if (input.unlockAt !== undefined) {
+          newUnlockAt = new Date(input.unlockAt);
+          await updateLetter(input.letterId, { unlockAt: newUnlockAt });
+        }
+        
+        // リマインダーの更新（unlockAtがある場合のみ）
+        if (newUnlockAt && input.reminderDaysBeforeList !== undefined) {
+          if (input.reminderEnabled === false || input.reminderDaysBeforeList.length === 0) {
+            // リマインダーを削除
+            await deleteRemindersByLetterId(input.letterId);
+          } else {
+            // リマインダーを更新（未送信のみ再計算）
+            await updateLetterReminders(
+              input.letterId,
+              ctx.user.id,
+              newUnlockAt,
+              input.reminderDaysBeforeList
+            );
+          }
+        }
+        
+        // 更新後のリマインダーを取得
+        const reminders = await getRemindersByLetterId(input.letterId);
+        const updatedLetter = await getLetterById(input.letterId);
+        
+        return {
+          success: true,
+          unlockAt: updatedLetter?.unlockAt?.toISOString() || null,
+          reminders,
+        };
+      }),
+
+    /**
+     * 共有トークンの状態を取得
+     */
+    getShareLinkStatus: protectedProcedure
+      .input(z.object({ letterId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.letterId);
+        if (!letter) throw new Error("Letter not found");
+        if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
+        
+        const activeToken = await getActiveShareToken(input.letterId);
+        
+        return {
+          hasActiveLink: !!activeToken,
+          shareToken: activeToken?.token || null,
+          viewCount: activeToken?.viewCount || 0,
+          lastAccessedAt: activeToken?.lastAccessedAt?.toISOString() || null,
+          createdAt: activeToken?.createdAt?.toISOString() || null,
+        };
       }),
 
     /**
@@ -264,6 +405,27 @@ export const appRouter = router({
           };
         }
         
+        // トークン状態チェック（letterShareTokensテーブル）
+        const tokenRecord = await getShareTokenRecord(input.shareToken);
+        if (tokenRecord) {
+          // トークンが無効化されている場合
+          if (tokenRecord.status === "revoked") {
+            return { 
+              error: "revoked",
+              message: "この共有リンクは無効化されました。送信者にお問い合わせください。",
+            };
+          }
+          // トークンが置換されている場合
+          if (tokenRecord.status === "rotated") {
+            return { 
+              error: "rotated",
+              message: "この共有リンクは新しいリンクに置き換えられました。送信者に新しいリンクをお問い合わせください。",
+            };
+          }
+          // activeなトークンの場合、アクセス統計を更新
+          await incrementShareTokenViewCount(input.shareToken);
+        }
+        
         const letter = await getLetterByShareToken(input.shareToken);
         if (!letter) {
           return { error: "not_found" };
@@ -279,7 +441,7 @@ export const appRouter = router({
         const unlockAt = letter.unlockAt ? new Date(letter.unlockAt) : null;
         const canUnlock = !unlockAt || now >= unlockAt;
         
-        // 閲覧数をインクリメント
+        // 閲覧数をインクリメント（後方互換性のためlettersテーブルも更新）
         await incrementViewCount(letter.id);
         
         // Shamirシェアの提供判定
