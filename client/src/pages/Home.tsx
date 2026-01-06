@@ -160,41 +160,49 @@ export default function Home() {
         value={template.name} 
         className={`border rounded-lg mb-3 ${colors.border} ${colors.bg} overflow-hidden`}
       >
-        <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-white/50 transition-colors">
+        {/* モバイル最適化: タップ領域で44px以上、パディング拡大 */}
+        <AccordionTrigger className="px-4 py-4 md:py-3 hover:no-underline hover:bg-white/50 transition-colors min-h-[56px] md:min-h-[48px]">
           <div className="flex items-center gap-3 flex-1 text-left">
-            <div className={`w-10 h-10 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 border ${colors.border}`}>
+            {/* アイコン: モバイルで少し大きく */}
+            <div className={`w-11 h-11 md:w-10 md:h-10 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 border ${colors.border}`}>
               {iconMap[template.icon || ""] || <Mail className="h-5 w-5" />}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-foreground">{template.displayName}</span>
+                {/* タイトル: モバイルで読みやすいサイズ */}
+                <span className="font-semibold text-foreground text-base md:text-sm">{template.displayName}</span>
                 {isRecommended && (
                   <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-xs">
                     おすすめ
                   </Badge>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground truncate">
+              {/* 説明: モバイルでは2行まで表示 */}
+              <p className="text-sm text-muted-foreground line-clamp-2 md:truncate">
                 {template.subtitle || template.description}
               </p>
             </div>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pb-4">
-          <div className="bg-white/70 rounded-lg p-4 space-y-4">
+          {/* モバイル最適化: パディング調整 */}
+          <div className="bg-white/70 rounded-lg p-4 md:p-4 space-y-4">
             {/* 録音ガイド（90秒で話す順番） */}
             {recordingGuide.length > 0 && (
               <div>
-                <h4 className="text-sm font-semibold text-foreground mb-2">
+                {/* モバイル最適化: 見出しサイズ調整 */}
+                <h4 className="text-base md:text-sm font-semibold text-foreground mb-3 md:mb-2">
                   📝 90秒で話す順番
                 </h4>
-                <ol className="space-y-1.5">
+                {/* モバイル最適化: ステップ間隔拡大 */}
+                <ol className="space-y-2.5 md:space-y-1.5">
                   {recordingGuide.map((step, i) => (
-                    <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                      <span className={`w-5 h-5 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 text-xs font-medium`}>
+                    <li key={i} className="text-sm md:text-sm text-muted-foreground flex items-start gap-2.5 md:gap-2">
+                      {/* モバイル最適化: 番号バッジ少し大きく */}
+                      <span className={`w-6 h-6 md:w-5 md:h-5 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 text-xs font-medium`}>
                         {i + 1}
                       </span>
-                      <span>{step}</span>
+                      <span className="leading-relaxed">{step}</span>
                     </li>
                   ))}
                 </ol>
@@ -203,25 +211,26 @@ export default function Home() {
 
             {/* 一言例 */}
             {template.exampleOneLiner && (
-              <div className="border-l-2 border-amber-300 pl-3 py-1">
-                <p className="text-sm italic text-muted-foreground">
+              <div className="border-l-2 border-amber-300 pl-3 py-2 md:py-1">
+                {/* モバイル最適化: 読みやすいサイズ */}
+                <p className="text-sm md:text-sm italic text-muted-foreground leading-relaxed">
                   「{template.exampleOneLiner}」
                 </p>
               </div>
             )}
 
-            {/* CTAボタン */}
-            <div className="pt-2">
+            {/* CTAボタン - モバイル最適化: タップしやすいサイズ */}
+            <div className="pt-3 md:pt-2">
               {isAuthenticated ? (
                 <Link href={`/create?template=${template.name}`}>
-                  <Button className="w-full">
-                    <PenLine className="mr-2 h-4 w-4" />
+                  <Button className="w-full h-12 md:h-10 text-base md:text-sm">
+                    <PenLine className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                     このテンプレートで手紙を書く
                   </Button>
                 </Link>
               ) : (
                 <a href={getLoginUrl()}>
-                  <Button className="w-full">
+                  <Button className="w-full h-12 md:h-10 text-base md:text-sm">
                     ログインして手紙を書く
                   </Button>
                 </a>
@@ -507,23 +516,24 @@ export default function Home() {
                   <Badge variant="outline">{filteredTemplates.length}件</Badge>
                 </div>
 
-                {/* 検索ボックス */}
+                {/* 検索ボックス - モバイル最適化: タップしやすい高さ */}
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 md:h-4 md:w-4 text-muted-foreground" />
                   <Input
                     placeholder="テンプレートを検索..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-11 md:pl-10 h-12 md:h-10 text-base md:text-sm"
                   />
                 </div>
 
-                {/* カテゴリフィルター */}
-                <div className="flex flex-wrap gap-2">
+                {/* カテゴリフィルター - モバイル最適化: 横スクロール可能 */}
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible scrollbar-hide">
                   <Button
                     variant={selectedCategory === null ? "default" : "outline"}
                     size="sm"
                     onClick={() => setSelectedCategory(null)}
+                    className="shrink-0 h-10 md:h-8 px-4 md:px-3 text-sm"
                   >
                     すべて
                   </Button>
@@ -535,7 +545,7 @@ export default function Home() {
                         variant={selectedCategory === key ? "default" : "outline"}
                         size="sm"
                         onClick={() => setSelectedCategory(selectedCategory === key ? null : key)}
-                        className={selectedCategory !== key ? `${colors.bg} ${colors.text} border ${colors.border} hover:${colors.bg}` : ""}
+                        className={`shrink-0 h-10 md:h-8 px-4 md:px-3 text-sm ${selectedCategory !== key ? `${colors.bg} ${colors.text} border ${colors.border} hover:${colors.bg}` : ""}`}
                       >
                         {label}
                       </Button>
