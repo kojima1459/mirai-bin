@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -552,6 +552,84 @@ export const appRouter = router({
           throw new Error("下書きが見つかりません");
         }
         await deleteDraft(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ============================================
+  // Storage Router
+  // ============================================
+  // Reminder Router
+  // ============================================
+  reminder: router({
+    /**
+     * 手紙のリマインダー設定を取得
+     */
+    getByLetterId: protectedProcedure
+      .input(z.object({ letterId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        // 所有者確認
+        const letter = await getLetterById(input.letterId);
+        if (!letter || letter.authorId !== ctx.user.id) {
+          return { reminders: [], daysBeforeList: [] };
+        }
+
+        const reminders = await getRemindersByLetterId(input.letterId);
+        const daysBeforeList = reminders.map(r => r.daysBefore);
+        return { reminders, daysBeforeList };
+      }),
+
+    /**
+     * 手紙のリマインダー設定を更新
+     */
+    update: protectedProcedure
+      .input(z.object({
+        letterId: z.number(),
+        daysBeforeList: z.array(z.number()).default([]), // [90, 30, 7, 1]
+        enabled: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // 所有者確認
+        const letter = await getLetterById(input.letterId);
+        if (!letter || letter.authorId !== ctx.user.id) {
+          throw new Error("手紙が見つかりません");
+        }
+
+        if (!letter.unlockAt) {
+          throw new Error("開封日時が設定されていません");
+        }
+
+        if (!input.enabled || input.daysBeforeList.length === 0) {
+          // リマインダーを削除
+          await deleteRemindersByLetterId(input.letterId);
+          return { success: true, reminders: [] };
+        }
+
+        // リマインダーを更新
+        await updateLetterReminders(
+          input.letterId,
+          ctx.user.id,
+          letter.unlockAt,
+          input.daysBeforeList
+        );
+
+        const reminders = await getRemindersByLetterId(input.letterId);
+        return { success: true, reminders };
+      }),
+
+    /**
+     * 手紙のリマインダーを削除
+     */
+    delete: protectedProcedure
+      .input(z.object({ letterId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        // 所有者確認
+        const letter = await getLetterById(input.letterId);
+        if (!letter || letter.authorId !== ctx.user.id) {
+          throw new Error("手紙が見つかりません");
+        }
+
+        await deleteRemindersByLetterId(input.letterId);
         return { success: true };
       }),
   }),

@@ -228,3 +228,34 @@
 - [x] 録音完了後に「次へ進む」ボタンを追加
 - [x] 録音完了確認画面（チェックマークアイコン、録音時間表示）を追加
 - [x] 「撮り直す」ボタンを追加
+
+## X日前リマインダー通知機能 ✅ 完了
+
+### DBスキーマ
+- [x] letter_remindersテーブル追加（id, letterId, ownerUserId, type, daysBefore, scheduledAt, sentAt, status, lastError）
+- [x] インデックス追加（scheduledAt, sentAt）
+
+### サーバーAPI
+- [x] reminder.update（daysBefore配列、enabled）
+- [x] reminder.getByLetterId（リマインダー取得）
+- [x] runReminderBatch（検索→送信→sentAt更新）
+- [x] 二重送信防止（sentAt IS NULLで原子的更新）
+
+### メール送信
+- [x] sendUnlockReminder関数実装
+- [x] 件名：「【未来便】開封日が近づいています（あとX日）」
+- [x] 本文：宛先ラベル、開封日、管理画面リンク、解錠コード再確認の案内
+
+### Cronエンドポイント
+- [x] POST /cron/reminders実装
+- [x] 毎日09:00 JSTで実行（プラットフォーム側で設定必要）
+
+### フロントエンドUI
+- [x] 手紙作成時の通知ON/OFF設定
+- [x] daysBefore選択（90/30/7/1日前、複数選択可）
+- [x] ゼロ知識設計の説明表示（解錠コードはメールに含まれない）
+
+### テスト
+- [x] reminder生成テスト（unlockAtからscheduledAt計算）
+- [x] 二重送信防止テスト
+- [x] markReminderAsSent/markReminderAsFailedテスト

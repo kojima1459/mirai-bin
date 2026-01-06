@@ -1,6 +1,6 @@
 import { eq, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, letters, templates, drafts, InsertLetter, InsertTemplate, InsertDraft, Letter, Template, Draft } from "../drizzle/schema";
+import { InsertUser, users, letters, templates, drafts, letterReminders, InsertLetter, InsertTemplate, InsertDraft, InsertLetterReminder, Letter, Template, Draft, LetterReminder } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -642,4 +642,187 @@ export async function getDraftByUserAndId(userId: number, draftId: number): Prom
     .where(and(eq(drafts.id, draftId), eq(drafts.userId, userId)))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+
+// ========================================
+// リマインダー関連
+// ========================================
+
+/**
+ * リマインダーを作成
+ */
+export async function createReminder(reminder: InsertLetterReminder): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.insert(letterReminders).values(reminder);
+  return result[0].insertId;
+}
+
+/**
+ * 手紙のリマインダーを一括作成
+ * @param letterId 手紙ID
+ * @param ownerUserId オーナーユーザーID
+ * @param unlockAt 開封日時
+ * @param daysBeforeList X日前のリスト（例: [90, 30, 7, 1]）
+ */
+export async function createRemindersForLetter(
+  letterId: number,
+  ownerUserId: number,
+  unlockAt: Date,
+  daysBeforeList: number[]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  // 既存のリマインダーを削除
+  await db.delete(letterReminders).where(eq(letterReminders.letterId, letterId));
+
+  // 新しいリマインダーを作成
+  for (const daysBefore of daysBeforeList) {
+    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1000);
+    
+    // 過去の日付はスキップ
+    if (scheduledAt <= new Date()) {
+      continue;
+    }
+
+    await db.insert(letterReminders).values({
+      letterId,
+      ownerUserId,
+      type: "before_unlock",
+      daysBefore,
+      scheduledAt,
+      status: "pending",
+    });
+  }
+}
+
+/**
+ * 手紙のリマインダーを取得
+ */
+export async function getRemindersByLetterId(letterId: number): Promise<LetterReminder[]> {
+  const db = await getDb();
+  if (!db) {
+    return [];
+  }
+
+  return await db.select().from(letterReminders)
+    .where(eq(letterReminders.letterId, letterId))
+    .orderBy(letterReminders.daysBefore);
+}
+
+/**
+ * 送信すべきリマインダーを取得（scheduledAt <= now かつ sentAt IS NULL）
+ */
+export async function getPendingReminders(limit: number = 100): Promise<(LetterReminder & { letter: Letter | null; user: { email: string | null; notificationEmail: string | null } | null })[]> {
+  const db = await getDb();
+  if (!db) {
+    return [];
+  }
+
+  const now = new Date();
+  
+  // pendingかつscheduledAt <= nowのリマインダーを取得
+  const reminders = await db.select().from(letterReminders)
+    .where(and(
+      eq(letterReminders.status, "pending"),
+      // scheduledAt <= now
+    ))
+    .limit(limit);
+
+  // scheduledAt <= now でフィルタリング（drizzle-ormのlte演算子を使用）
+  const filteredReminders = reminders.filter(r => r.scheduledAt <= now);
+
+  // 各リマインダーに手紙とユーザー情報を付加
+  const result = await Promise.all(filteredReminders.map(async (reminder) => {
+    const letter = await db.select().from(letters)
+      .where(eq(letters.id, reminder.letterId))
+      .limit(1);
+    
+    const user = await db.select({
+      email: users.email,
+      notificationEmail: users.notificationEmail,
+    }).from(users)
+      .where(eq(users.id, reminder.ownerUserId))
+      .limit(1);
+
+    return {
+      ...reminder,
+      letter: letter[0] || null,
+      user: user[0] || null,
+    };
+  }));
+
+  return result;
+}
+
+/**
+ * リマインダーを送信済みにマーク（原子的更新で二重送信防止）
+ */
+export async function markReminderAsSent(reminderId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  // sentAt IS NULL の条件で更新（二重送信防止）
+  const result = await db.update(letterReminders)
+    .set({
+      sentAt: new Date(),
+      status: "sent",
+    })
+    .where(and(
+      eq(letterReminders.id, reminderId),
+      eq(letterReminders.status, "pending")
+    ));
+
+  // 更新件数が0なら既に送信済み
+  return (result[0].affectedRows ?? 0) > 0;
+}
+
+/**
+ * リマインダーを失敗にマーク
+ */
+export async function markReminderAsFailed(reminderId: number, error: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(letterReminders)
+    .set({
+      status: "failed",
+      lastError: error,
+    })
+    .where(eq(letterReminders.id, reminderId));
+}
+
+/**
+ * 手紙のリマインダー設定を更新
+ */
+export async function updateLetterReminders(
+  letterId: number,
+  ownerUserId: number,
+  unlockAt: Date,
+  daysBeforeList: number[]
+): Promise<void> {
+  await createRemindersForLetter(letterId, ownerUserId, unlockAt, daysBeforeList);
+}
+
+/**
+ * 手紙のリマインダーを削除
+ */
+export async function deleteRemindersByLetterId(letterId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.delete(letterReminders).where(eq(letterReminders.letterId, letterId));
 }

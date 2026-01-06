@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { trpc } from "@/lib/trpc";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useEncryption } from "@/hooks/useEncryption";
@@ -44,7 +45,8 @@ import {
   EyeOff,
   Download,
   FileText,
-  RotateCcw
+  RotateCcw,
+  Bell
 } from "lucide-react";
 import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
 import { TemplateAccordion } from "@/components/TemplateAccordion";
@@ -103,6 +105,10 @@ export default function CreateLetter() {
   const [showUnlockCode, setShowUnlockCode] = useState(false);
   const [showBackupShare, setShowBackupShare] = useState(false);
   const [unlockCodeViewCount, setUnlockCodeViewCount] = useState(0); // 再表示制限用
+  
+  // リマインダー設定
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [reminderDays, setReminderDays] = useState<number[]>([30, 7, 1]); // デフォルト: 30日前、7日前、1日前
 
   // Hooks
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
@@ -118,6 +124,7 @@ export default function CreateLetter() {
   const setUnlockEnvelopeMutation = trpc.letter.setUnlockEnvelope.useMutation();
   const generateShareLinkMutation = trpc.letter.generateShareLink.useMutation();
   const deleteDraftMutation = trpc.draft.delete.useMutation();
+  const updateReminderMutation = trpc.reminder.update.useMutation();
 
   // 下書き自動保存
   const { draftId, isSaving, lastSaved, save: saveDraft, saveImmediately, loadDraft, resetDraft, setDraftId } = useDraftAutoSave({
@@ -586,6 +593,21 @@ export default function CreateLetter() {
         }
       }
       
+      // 9. リマインダーを設定（開封日が設定されている場合）
+      if (reminderEnabled && reminderDays.length > 0 && unlockDate) {
+        try {
+          await updateReminderMutation.mutateAsync({
+            letterId: letterResult.id,
+            daysBeforeList: reminderDays,
+            enabled: true,
+          });
+        } catch (e) {
+          // リマインダー設定の失敗は警告のみ
+          console.warn("リマインダーの設定に失敗しました", e);
+          toast.warning("リマインダーの設定に失敗しました");
+        }
+      }
+      
       setStep("complete");
       toast.success("手紙を保存しました");
     } catch (err) {
@@ -940,6 +962,65 @@ export default function CreateLetter() {
                   </Button>
                 )}
               </div>
+
+              {/* リマインダー設定（開封日時が設定されている場合のみ表示） */}
+              {unlockDate && (
+                <div className="space-y-4 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Bell className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+                      <Label className="font-medium text-base md:text-sm">開封日前のリマインダー</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="reminderEnabled"
+                        checked={reminderEnabled}
+                        onCheckedChange={(checked) => setReminderEnabled(checked === true)}
+                      />
+                      <Label htmlFor="reminderEnabled" className="text-base md:text-sm cursor-pointer">
+                        有効
+                      </Label>
+                    </div>
+                  </div>
+                  
+                  {reminderEnabled && (
+                    <>
+                      <p className="text-base md:text-sm text-muted-foreground">
+                        開封日前にメールでお知らせします。PDFや解錠コードの保管場所を確認する機会になります。
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {[90, 30, 7, 1].map((days) => (
+                          <label
+                            key={days}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
+                              reminderDays.includes(days)
+                                ? "bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600"
+                                : "bg-background border-input hover:bg-muted"
+                            }`}
+                          >
+                            <Checkbox
+                              checked={reminderDays.includes(days)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setReminderDays([...reminderDays, days].sort((a, b) => b - a));
+                                } else {
+                                  setReminderDays(reminderDays.filter((d) => d !== days));
+                                }
+                              }}
+                            />
+                            <span className="text-base md:text-sm">
+                              {days === 1 ? "1日前" : `${days}日前`}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        ※ 解錠コードはメールに含まれません（ゼロ知識設計）
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setStep("recording")} className="flex-1 h-12 md:h-10 text-base md:text-sm">

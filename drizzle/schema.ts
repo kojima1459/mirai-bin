@@ -163,3 +163,35 @@ export const drafts = mysqlTable("drafts", {
 
 export type Draft = typeof drafts.$inferSelect;
 export type InsertDraft = typeof drafts.$inferInsert;
+
+/**
+ * リマインダーテーブル
+ * 
+ * X日前リマインド通知用
+ * - 毎日バッチでscheduledAt <= nowかつsentAt IS NULLを検索
+ * - 二重送信防止: sentAt IS NULLで原子的更新
+ */
+export const letterReminders = mysqlTable("letter_reminders", {
+  id: int("id").autoincrement().primaryKey(),
+  letterId: int("letterId").notNull(),
+  ownerUserId: int("ownerUserId").notNull(),
+  
+  // リマインダー種別
+  type: varchar("type", { length: 50 }).default("before_unlock").notNull(), // before_unlock
+  daysBefore: int("daysBefore").notNull(), // 90, 30, 7, 1
+  
+  // スケジュール
+  scheduledAt: timestamp("scheduledAt").notNull(), // unlockAt - daysBefore
+  sentAt: timestamp("sentAt"), // 送信済みならセット
+  
+  // ステータス
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, sent, failed
+  lastError: text("lastError"),
+  
+  // メタデータ
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LetterReminder = typeof letterReminders.$inferSelect;
+export type InsertLetterReminder = typeof letterReminders.$inferInsert;

@@ -7,6 +7,8 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { runReminderBatch } from "../reminderBatch";
+import { ENV } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -35,6 +37,30 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Cron endpoint for reminder batch processing
+  // POST /api/cron/reminders
+  // 認証: Bearer tokenまたはサービス間トークン
+  app.post("/api/cron/reminders", async (req, res) => {
+    // 簡易認証（本番環境ではより強固な認証を推奨）
+    const authHeader = req.headers.authorization;
+    const expectedToken = ENV.forgeApiKey;
+    
+    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.slice(7) !== expectedToken) {
+      console.warn("[Cron] Unauthorized request to /api/cron/reminders");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      console.log("[Cron] Running reminder batch...");
+      const result = await runReminderBatch();
+      console.log("[Cron] Reminder batch completed:", result);
+      return res.json({ success: true, result });
+    } catch (error) {
+      console.error("[Cron] Reminder batch failed:", error);
+      return res.status(500).json({ error: "Batch processing failed" });
+    }
+  });
   // tRPC API
   app.use(
     "/api/trpc",
