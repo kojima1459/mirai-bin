@@ -297,13 +297,35 @@ export async function seedTemplates(): Promise<void> {
 - 形式的な挨拶文は追加しない
 - 話者の感情やニュアンスを大切にする
 
-【音声文字起こし】
+【音壵文字起こし】
 {{transcription}}`,
       recordingPrompt: "伝えたいことを、あなたの言葉で自由に話してください。日常の会話のように、思いのままに。",
       exampleOneLiner: "あなたの言葉で、自由に想いを伝える",
       icon: "message-circle",
       isRecommended: true,
       sortOrder: 1,
+    },
+    {
+      name: "raw-transcription",
+      displayName: "文字起こしそのまま",
+      subtitle: "録音した言葉を100%そのまま残す",
+      description: "AIによる整形を一切行わず、文字起こし結果をそのまま手紙にします。言い間違いや「えーと」などのフィラーも含めて、あなたの声を完全に保存します。",
+      category: "milestone",
+      prompt: `以下の音声文字起こしを、一切変更せずにそのまま出力してください。
+
+【重要なルール】
+- 文字起こしの内容を一切変更しない
+- 修正、追加、削除は行わない
+- 文章としての整形も一切行わない
+- そのままの形で出力する
+
+【音壵文字起こし】
+{{transcription}}`,
+      recordingPrompt: "伝えたいことを、思いのままに話してください。録音した言葉がそのまま手紙になります。",
+      exampleOneLiner: "録音した言葉を100%そのまま残す",
+      icon: "mic",
+      isRecommended: true,
+      sortOrder: 2,
     },
 
     // === 幼少期 === 
