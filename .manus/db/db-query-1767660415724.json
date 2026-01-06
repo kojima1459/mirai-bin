@@ -1,0 +1,22 @@
+{
+  "query": "SELECT id, name, displayName, category FROM templates WHERE name IN ('10years', 'becoming-parent');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user FgFwwtUbtDZZFFR.5d8a21a48e1b --database 5tqJK5rYriBnnyCGXizQtF --execute SELECT id, name, displayName, category FROM templates WHERE name IN ('10years', 'becoming-parent');",
+  "rows": [
+    {
+      "id": "4",
+      "name": "10years",
+      "displayName": "10歳の誕生日に",
+      "category": "emotion"
+    },
+    {
+      "id": "15",
+      "name": "becoming-parent",
+      "displayName": "子どもが生まれた日に",
+      "category": "emotion"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tdisplayName\tcategory\n4\t10years\t10歳の誕生日に\temotion\n15\tbecoming-parent\t子どもが生まれた日に\temotion\n",
+  "stderr": "",
+  "execution_time_ms": 1511
+}

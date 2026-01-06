@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE templates SET category = 'milestone' WHERE name IN ('10years', 'becoming-parent');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user FgFwwtUbtDZZFFR.5d8a21a48e1b --database 5tqJK5rYriBnnyCGXizQtF --execute UPDATE templates SET category = 'milestone' WHERE name IN ('10years', 'becoming-parent');",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1559
+}
