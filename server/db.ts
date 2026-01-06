@@ -279,6 +279,33 @@ export async function seedTemplates(): Promise<void> {
 
   // 親から子への気持ちの承継をメインに、人生の節目に合わせたテンプレート
   const defaultTemplates: InsertTemplate[] = [
+    // === 自由形式（おすすめ） ===
+    {
+      name: "free-format",
+      displayName: "自由形式",
+      subtitle: "あなたの言葉で、自由に想いを伝える",
+      description: "テンプレートの形式にとらわれず、あなたの言葉で自由に手紙を書きます。口語表現や話し言葉の温かさをそのまま残します。",
+      category: "milestone",
+      prompt: `あなたは親が子どもに宛てた手紙を書くアシスタントです。
+以下の音声文字起こしをもとに、温かい手紙を作成してください。
+
+【ルール】
+- 話者の言葉をできるだけそのまま活かす
+- 口語表現や話し言葉の温かさを保持する
+- 明らかな言い間違いや重複のみ修正
+- 長さは話者の意図に合わせる（制限なし）
+- 形式的な挨拶文は追加しない
+- 話者の感情やニュアンスを大切にする
+
+【音声文字起こし】
+{{transcription}}`,
+      recordingPrompt: "伝えたいことを、あなたの言葉で自由に話してください。日常の会話のように、思いのままに。",
+      exampleOneLiner: "あなたの言葉で、自由に想いを伝える",
+      icon: "message-circle",
+      isRecommended: true,
+      sortOrder: 1,
+    },
+
     // === 幼少期 === 
     {
       name: "10years",
