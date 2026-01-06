@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE templates SET category = 'milestone' WHERE name IN ('elementary-graduation','junior-high-entrance','junior-high-graduation','high-school-entrance','high-school-graduation','university-entrance','coming-of-age','first-job','first-love','wedding-day');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user FgFwwtUbtDZZFFR.5d8a21a48e1b --database 5tqJK5rYriBnnyCGXizQtF --execute UPDATE templates SET category = 'milestone' WHERE name IN ('elementary-graduation','junior-high-entrance','junior-high-graduation','high-school-entrance','high-school-graduation','university-entrance','coming-of-age','first-job','first-love','wedding-day');",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1527
+}
