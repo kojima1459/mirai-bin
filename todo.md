@@ -365,3 +365,14 @@
 
 ### テスト
 - [x] 全テストがパス（68件）
+
+
+## 6. ViteのHMR WebSocket接続エラー修正 ✅ 完了
+
+### 問題
+- プロキシ環境でViteのHMR WebSocketが接続できない
+- ブラウザコンソールに「failed to connect to websocket」エラー
+
+### 修正内容
+- [x] vite.config.tsのHMR設定を修正（protocol: "wss", clientPort: 443）
+- [x] サーバー再起動して動作確認
