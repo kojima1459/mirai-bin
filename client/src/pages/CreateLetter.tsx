@@ -43,7 +43,8 @@ import {
   Eye,
   EyeOff,
   Download,
-  FileText
+  FileText,
+  RotateCcw
 } from "lucide-react";
 import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
 import { TemplateAccordion } from "@/components/TemplateAccordion";
@@ -198,10 +199,16 @@ export default function CreateLetter() {
     }
   };
 
-  // 録音停止 → 文字起こし → AI生成
+  // 録音停止 → 確認画面へ
   const handleStopRecording = async () => {
     const result = await stop();
     if (!result || !base64) return;
+    // 録音完了後は確認画面を表示（次へ進むボタンで文字起こしへ）
+  };
+
+  // 次へ進む（文字起こし → AI生成）
+  const handleProceedToTranscription = async () => {
+    if (!base64) return;
 
     setStep("transcribing");
 
@@ -753,7 +760,38 @@ export default function CreateLetter() {
                       タップして録音を停止
                     </p>
                   </>
+                ) : base64 ? (
+                  // 録音完了後の確認画面
+                  <>
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.3 }}
+                      className="flex flex-col items-center gap-4"
+                    >
+                      <div className="w-24 h-24 md:w-20 md:h-20 rounded-full bg-green-100 flex items-center justify-center">
+                        <Check className="h-12 w-12 md:h-10 md:w-10 text-green-600" />
+                      </div>
+                      <p className="text-lg md:text-base font-medium text-green-700">録音完了！</p>
+                      <p className="text-base md:text-sm text-muted-foreground">
+                        {elapsed}秒の音声を録音しました
+                      </p>
+                    </motion.div>
+                    <div className="flex gap-3 w-full max-w-xs">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          resetRecording();
+                        }}
+                        className="flex-1 h-12 md:h-10 text-base md:text-sm"
+                      >
+                        <RotateCcw className="mr-2 h-5 w-5 md:h-4 md:w-4" />
+                        撮り直す
+                      </Button>
+                    </div>
+                  </>
                 ) : (
+                  // 録音開始前
                   <>
                     <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
@@ -784,6 +822,15 @@ export default function CreateLetter() {
                   <ArrowLeft className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   戻る
                 </Button>
+                {base64 && (
+                  <Button
+                    onClick={handleProceedToTranscription}
+                    className="flex-1 h-12 md:h-10 text-base md:text-sm"
+                  >
+                    次へ進む
+                    <ArrowRight className="ml-2 h-5 w-5 md:h-4 md:w-4" />
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
