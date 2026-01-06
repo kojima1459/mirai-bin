@@ -1,0 +1,20 @@
+{
+  "query": "SELECT name, displayName, sortOrder FROM templates WHERE name IN ('free-format', 'raw-transcription')",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user FgFwwtUbtDZZFFR.5d8a21a48e1b --database 5tqJK5rYriBnnyCGXizQtF --execute SELECT name, displayName, sortOrder FROM templates WHERE name IN ('free-format', 'raw-transcription')",
+  "rows": [
+    {
+      "name": "free-format",
+      "displayName": "自由形式",
+      "sortOrder": "1"
+    },
+    {
+      "name": "raw-transcription",
+      "displayName": "文字起こしそのまま",
+      "sortOrder": "2"
+    }
+  ],
+  "messages": [],
+  "stdout": "name\tdisplayName\tsortOrder\nfree-format\t自由形式\t1\nraw-transcription\t文字起こしそのまま\t2\n",
+  "stderr": "",
+  "execution_time_ms": 1519
+}

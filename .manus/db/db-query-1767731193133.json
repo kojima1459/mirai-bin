@@ -1,0 +1,138 @@
+{
+  "query": "SELECT name, displayName FROM templates ORDER BY sortOrder, id",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user FgFwwtUbtDZZFFR.5d8a21a48e1b --database 5tqJK5rYriBnnyCGXizQtF --execute SELECT name, displayName FROM templates ORDER BY sortOrder, id",
+  "rows": [
+    {
+      "name": "bad-night",
+      "displayName": "うまくいかない夜へ"
+    },
+    {
+      "name": "free-format",
+      "displayName": "自由形式"
+    },
+    {
+      "name": "self-hate",
+      "displayName": "自分が嫌いになった君へ"
+    },
+    {
+      "name": "raw-transcription",
+      "displayName": "文字起こしそのまま"
+    },
+    {
+      "name": "apology",
+      "displayName": "謝りたいことがある"
+    },
+    {
+      "name": "after-failure",
+      "displayName": "失敗して落ち込む君へ"
+    },
+    {
+      "name": "anger-control",
+      "displayName": "怒りが抑えられない君へ"
+    },
+    {
+      "name": "friend-trouble",
+      "displayName": "友達がしんどい君へ"
+    },
+    {
+      "name": "burnout",
+      "displayName": "頑張れない君へ"
+    },
+    {
+      "name": "want-to-run",
+      "displayName": "逃げたい君へ"
+    },
+    {
+      "name": "big-decision",
+      "displayName": "大事な決断の前の君へ"
+    },
+    {
+      "name": "love-you",
+      "displayName": "言葉にできなかった\"愛してる\""
+    },
+    {
+      "name": "your-strengths",
+      "displayName": "君の\"すごいところ\"の記録"
+    },
+    {
+      "name": "family-secrets",
+      "displayName": "家族の秘密の地図"
+    },
+    {
+      "name": "money-talk",
+      "displayName": "君に伝えたいお金の話"
+    },
+    {
+      "name": "protect-yourself",
+      "displayName": "心と体を守る約束"
+    },
+    {
+      "name": "ordinary-day",
+      "displayName": "節目じゃない普通の日の君へ"
+    },
+    {
+      "name": "when-you-become-parent",
+      "displayName": "いつか親になる君へ"
+    },
+    {
+      "name": "10years",
+      "displayName": "10歳の誕生日に"
+    },
+    {
+      "name": "elementary-graduation",
+      "displayName": "小学校卒業の日に"
+    },
+    {
+      "name": "junior-high-entrance",
+      "displayName": "中学入学の日に"
+    },
+    {
+      "name": "junior-high-graduation",
+      "displayName": "中学卒業の日に"
+    },
+    {
+      "name": "high-school-entrance",
+      "displayName": "高校入学の日に"
+    },
+    {
+      "name": "high-school-graduation",
+      "displayName": "高校卒業の日に"
+    },
+    {
+      "name": "university-entrance",
+      "displayName": "大学入学の日に"
+    },
+    {
+      "name": "coming-of-age",
+      "displayName": "成人の日に"
+    },
+    {
+      "name": "first-job",
+      "displayName": "就職の日に"
+    },
+    {
+      "name": "first-love",
+      "displayName": "最初に恋をした日に"
+    },
+    {
+      "name": "wedding-day",
+      "displayName": "結婚する日に"
+    },
+    {
+      "name": "becoming-parent",
+      "displayName": "子どもが生まれた日に"
+    },
+    {
+      "name": "difficult-times",
+      "displayName": "辛いときに読んで"
+    },
+    {
+      "name": "someday",
+      "displayName": "いつか読んでほしい手紙"
+    }
+  ],
+  "messages": [],
+  "stdout": "name\tdisplayName\nbad-night\tうまくいかない夜へ\nfree-format\t自由形式\nself-hate\t自分が嫌いになった君へ\nraw-transcription\t文字起こしそのまま\napology\t謝りたいことがある\nafter-failure\t失敗して落ち込む君へ\nanger-control\t怒りが抑えられない君へ\nfriend-trouble\t友達がしんどい君へ\nburnout\t頑張れない君へ\nwant-to-run\t逃げたい君へ\nbig-decision\t大事な決断の前の君へ\nlove-you\t言葉にできなかった\"愛してる\"\nyour-strengths\t君の\"すごいところ\"の記録\nfamily-secrets\t家族の秘密の地図\nmoney-talk\t君に伝えたいお金の話\nprotect-yourself\t心と体を守る約束\nordinary-day\t節目じゃない普通の日の君へ\nwhen-you-become-parent\tいつか親になる君へ\n10years\t10歳の誕生日に\nelementary-graduation\t小学校卒業の日に\njunior-high-entrance\t中学入学の日に\njunior-high-graduation\t中学卒業の日に\nhigh-school-entrance\t高校入学の日に\nhigh-school-graduation\t高校卒業の日に\nuniversity-entrance\t大学入学の日に\ncoming-of-age\t成人の日に\nfirst-job\t就職の日に\nfirst-love\t最初に恋をした日に\nwedding-day\t結婚する日に\nbecoming-parent\t子どもが生まれた日に\ndifficult-times\t辛いときに読んで\nsomeday\tいつか読んでほしい手紙\n",
+  "stderr": "",
+  "execution_time_ms": 1558
+}

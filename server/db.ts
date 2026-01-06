@@ -272,10 +272,7 @@ export async function seedTemplates(): Promise<void> {
   }
 
   const existingTemplates = await getAllTemplates();
-  if (existingTemplates.length > 0) {
-    console.log("[Database] Templates already exist, skipping seed");
-    return;
-  }
+  const existingNames = new Set(existingTemplates.map(t => t.name));
 
   // 親から子への気持ちの承継をメインに、人生の節目に合わせたテンプレート
   const defaultTemplates: InsertTemplate[] = [
@@ -629,11 +626,19 @@ export async function seedTemplates(): Promise<void> {
     },
   ];
 
-  for (const template of defaultTemplates) {
+  // 既存のテンプレートがない場合は全て追加、ある場合は存在しないもののみ追加
+  const templatesToAdd = defaultTemplates.filter(t => !existingNames.has(t.name));
+  
+  if (templatesToAdd.length === 0) {
+    console.log("[Database] All templates already exist, skipping seed");
+    return;
+  }
+
+  for (const template of templatesToAdd) {
     await db.insert(templates).values(template);
   }
 
-  console.log(`[Database] Seeded ${defaultTemplates.length} default templates`);
+  console.log(`[Database] Added ${templatesToAdd.length} new templates: ${templatesToAdd.map(t => t.name).join(', ')}`);
 }
 
 
