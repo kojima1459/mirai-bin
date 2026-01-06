@@ -629,13 +629,13 @@ export default function CreateLetter() {
         </div>
       </header>
 
-      <main className="container py-8 max-w-2xl">
-        {/* ステップインジケーター */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+      <main className="container py-6 md:py-8 max-w-2xl">
+        {/* ステップインジケーター - モバイル最適化 */}
+        <div className="flex items-center justify-center gap-1.5 md:gap-2 mb-6 md:mb-8">
           {["template", "recording", "editing", "complete"].map((s, i) => (
             <div key={s} className="flex items-center">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={`w-9 h-9 md:w-8 md:h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                   step === s || (step === "transcribing" && s === "recording") || (step === "generating" && s === "recording") || (step === "encrypting" && s === "editing")
                     ? "bg-primary text-primary-foreground"
                     : ["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s)
@@ -649,21 +649,21 @@ export default function CreateLetter() {
                   i + 1
                 )}
               </div>
-              {i < 3 && <div className="w-8 h-0.5 bg-muted mx-1" />}
+              {i < 3 && <div className="w-6 md:w-8 h-0.5 bg-muted mx-0.5 md:mx-1" />}
             </div>
           ))}
         </div>
 
         {/* テンプレート選択 */}
         {step === "template" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>テンプレートを選ぶ</CardTitle>
-              <CardDescription>
+          <Card className="border-0 md:border shadow-none md:shadow-sm">
+            <CardHeader className="px-0 md:px-6">
+              <CardTitle className="text-xl md:text-lg">テンプレートを選ぶ</CardTitle>
+              <CardDescription className="text-base md:text-sm">
                 手紙のシーンを選んでください
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 px-0 md:px-6">
               {templatesLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -682,18 +682,19 @@ export default function CreateLetter() {
 
               <div className="space-y-4 pt-4 border-t">
                 <div className="space-y-2">
-                  <Label htmlFor="recipientName">宛先の名前（任意）</Label>
+                  <Label htmlFor="recipientName" className="text-base md:text-sm">宛先の名前（任意）</Label>
                   <Input
                     id="recipientName"
                     placeholder="例：太郎"
                     value={recipientName}
                     onChange={(e) => setRecipientName(e.target.value)}
+                    className="h-12 md:h-10 text-base md:text-sm"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="recipientRelation">関係（任意）</Label>
+                  <Label htmlFor="recipientRelation" className="text-base md:text-sm">関係（任意）</Label>
                   <Select value={recipientRelation} onValueChange={setRecipientRelation}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-12 md:h-10 text-base md:text-sm">
                       <SelectValue placeholder="選択してください" />
                     </SelectTrigger>
                     <SelectContent>
@@ -701,6 +702,12 @@ export default function CreateLetter() {
                       <SelectItem value="daughter">娘</SelectItem>
                       <SelectItem value="child">子ども</SelectItem>
                       <SelectItem value="grandchild">孫</SelectItem>
+                      <SelectItem value="friend">友達</SelectItem>
+                      <SelectItem value="wife">妻</SelectItem>
+                      <SelectItem value="husband">夫</SelectItem>
+                      <SelectItem value="boyfriend">彼氏</SelectItem>
+                      <SelectItem value="girlfriend">彼女</SelectItem>
+                      <SelectItem value="colleague">同期</SelectItem>
                       <SelectItem value="other">その他</SelectItem>
                     </SelectContent>
                   </Select>
@@ -710,10 +717,10 @@ export default function CreateLetter() {
               <Button
                 onClick={() => setStep("recording")}
                 disabled={!selectedTemplate}
-                className="w-full"
+                className="w-full h-12 md:h-10 text-base md:text-sm"
               >
                 次へ
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="ml-2 h-5 w-5 md:h-4 md:w-4" />
               </Button>
             </CardContent>
           </Card>
@@ -721,15 +728,15 @@ export default function CreateLetter() {
 
         {/* 録音 */}
         {step === "recording" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>想いを録音する</CardTitle>
-              <CardDescription>
+          <Card className="border-0 md:border shadow-none md:shadow-sm">
+            <CardHeader className="px-0 md:px-6 text-center">
+              <CardTitle className="text-xl md:text-lg">想いを録音する</CardTitle>
+              <CardDescription className="text-base md:text-sm">
                 {selectedTemplateData?.recordingPrompt || "伝えたいことを自由に話してください"}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col items-center gap-6">
+            <CardContent className="space-y-6 px-0 md:px-6">
+              <div className="flex flex-col items-center gap-6 py-4">
                 {isRecording ? (
                   <>
                     <AudioWaveform isRecording={isRecording} />
@@ -738,11 +745,11 @@ export default function CreateLetter() {
                       size="lg"
                       variant="destructive"
                       onClick={handleStopRecording}
-                      className="w-32 h-32 rounded-full"
+                      className="w-36 h-36 md:w-32 md:h-32 rounded-full shadow-lg"
                     >
-                      <Square className="h-8 w-8" />
+                      <Square className="h-10 w-10 md:h-8 md:w-8" />
                     </Button>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-base md:text-sm text-muted-foreground">
                       タップして録音を停止
                     </p>
                   </>
@@ -756,12 +763,12 @@ export default function CreateLetter() {
                       <Button
                         size="lg"
                         onClick={handleStartRecording}
-                        className="w-32 h-32 rounded-full bg-primary hover:bg-primary/90"
+                        className="w-36 h-36 md:w-32 md:h-32 rounded-full bg-primary hover:bg-primary/90 shadow-lg"
                       >
-                        <Mic className="h-8 w-8" />
+                        <Mic className="h-10 w-10 md:h-8 md:w-8" />
                       </Button>
                     </motion.div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-base md:text-sm text-muted-foreground">
                       タップして録音を開始（最大{MAX_DURATION}秒）
                     </p>
                   </>
@@ -769,12 +776,12 @@ export default function CreateLetter() {
               </div>
 
               {recordingError && (
-                <p className="text-sm text-destructive text-center">{recordingError}</p>
+                <p className="text-base md:text-sm text-destructive text-center">{recordingError}</p>
               )}
 
               <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => setStep("template")} className="flex-1">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                <Button variant="outline" onClick={() => setStep("template")} className="flex-1 h-12 md:h-10 text-base md:text-sm">
+                  <ArrowLeft className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   戻る
                 </Button>
               </div>
@@ -810,48 +817,48 @@ export default function CreateLetter() {
 
         {/* 編集 */}
         {step === "editing" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>手紙を編集する</CardTitle>
-              <CardDescription>
+          <Card className="border-0 md:border shadow-none md:shadow-sm">
+            <CardHeader className="px-0 md:px-6">
+              <CardTitle className="text-xl md:text-lg">手紙を編集する</CardTitle>
+              <CardDescription className="text-base md:text-sm">
                 内容を確認・編集してください
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 px-0 md:px-6">
               {transcription && (
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">文字起こし結果</Label>
-                  <div className="p-3 bg-muted rounded-lg text-sm">
+                  <Label className="text-muted-foreground text-base md:text-sm">文字起こし結果</Label>
+                  <div className="p-3 bg-muted rounded-lg text-base md:text-sm leading-relaxed">
                     {transcription}
                   </div>
                 </div>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="finalContent">手紙の内容</Label>
+                <Label htmlFor="finalContent" className="text-base md:text-sm">手紙の内容</Label>
                 <Textarea
                   id="finalContent"
                   value={finalContent}
                   onChange={(e) => setFinalContent(e.target.value)}
                   rows={12}
-                  className="resize-none"
+                  className="resize-none text-base md:text-sm leading-relaxed"
                 />
               </div>
 
               {/* 開封日時設定 */}
               <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-amber-600" />
-                  <Label className="font-medium">開封日時を設定（任意）</Label>
+                  <Lock className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
+                  <Label className="font-medium text-base md:text-sm">開封日時を設定（任意）</Label>
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base md:text-sm text-muted-foreground">
                   設定した日時まで手紙を開封できないようにします
                 </p>
-                <div className="flex gap-3">
+                <div className="flex flex-col md:flex-row gap-3">
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="flex-1 justify-start">
-                        <Calendar className="mr-2 h-4 w-4" />
+                      <Button variant="outline" className="flex-1 justify-start h-12 md:h-10 text-base md:text-sm">
+                        <Calendar className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                         {unlockDate ? format(unlockDate, "yyyy年M月d日", { locale: ja }) : "日付を選択"}
                       </Button>
                     </PopoverTrigger>
@@ -869,7 +876,7 @@ export default function CreateLetter() {
                     type="time"
                     value={unlockTime}
                     onChange={(e) => setUnlockTime(e.target.value)}
-                    className="w-32"
+                    className="w-full md:w-32 h-12 md:h-10 text-base md:text-sm"
                   />
                 </div>
                 {unlockDate && (
@@ -880,7 +887,7 @@ export default function CreateLetter() {
                       setUnlockDate(undefined);
                       setUnlockTime("09:00");
                     }}
-                    className="text-muted-foreground"
+                    className="text-muted-foreground text-base md:text-sm"
                   >
                     開封日時をクリア
                   </Button>
@@ -888,13 +895,13 @@ export default function CreateLetter() {
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep("recording")} className="flex-1">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                <Button variant="outline" onClick={() => setStep("recording")} className="flex-1 h-12 md:h-10 text-base md:text-sm">
+                  <ArrowLeft className="mr-2 h-5 w-5 md:h-4 md:w-4" />
                   録り直す
                 </Button>
-                <Button onClick={handleSave} className="flex-1">
+                <Button onClick={handleSave} className="flex-1 h-12 md:h-10 text-base md:text-sm">
                   保存する
-                  <Lock className="ml-2 h-4 w-4" />
+                  <Lock className="ml-2 h-5 w-5 md:h-4 md:w-4" />
                 </Button>
               </div>
             </CardContent>
