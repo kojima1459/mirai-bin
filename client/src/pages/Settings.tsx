@@ -6,14 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Mail, Bell, Save, Loader2, Check } from "lucide-react";
+import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Settings() {
   const { user, loading: authLoading } = useAuth();
   const [notificationEmail, setNotificationEmail] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [hasEmailChanges, setHasEmailChanges] = useState(false);
 
   // 設定を取得
   const { data: settings, isLoading: settingsLoading } = trpc.user.getSettings.useQuery(
@@ -32,10 +34,24 @@ export default function Settings() {
     },
   });
 
+  // アカウントメール更新
+  const updateEmailMutation = trpc.user.updateEmail.useMutation({
+    onSuccess: () => {
+      toast.success("アカウントメールを更新しました");
+      setHasEmailChanges(false);
+      // ページをリロードして最新情報を取得
+      window.location.reload();
+    },
+    onError: (error) => {
+      toast.error("更新に失敗しました", { description: error.message });
+    },
+  });
+
   // 初期値を設定
   useEffect(() => {
     if (settings) {
       setNotificationEmail(settings.notificationEmail || "");
+      setAccountEmail(settings.accountEmail || "");
     }
   }, [settings]);
 
@@ -44,8 +60,11 @@ export default function Settings() {
     if (settings) {
       const original = settings.notificationEmail || "";
       setHasChanges(notificationEmail !== original);
+      
+      const originalEmail = settings.accountEmail || "";
+      setHasEmailChanges(accountEmail !== originalEmail && accountEmail.trim() !== "");
     }
-  }, [notificationEmail, settings]);
+  }, [notificationEmail, accountEmail, settings]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -53,6 +72,20 @@ export default function Settings() {
       // 空文字の場合はnullを送信（アカウントメールを使用）
       const emailToSave = notificationEmail.trim() || null;
       await updateMutation.mutateAsync({ notificationEmail: emailToSave });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdateEmail = async () => {
+    if (!accountEmail.trim()) {
+      toast.error("メールアドレスを入力してください");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateEmailMutation.mutateAsync({ newEmail: accountEmail.trim() });
     } finally {
       setIsSaving(false);
     }
@@ -119,9 +152,43 @@ export default function Settings() {
                 <Label className="text-muted-foreground">名前</Label>
                 <p className="font-medium">{user.name || "未設定"}</p>
               </div>
-              <div>
-                <Label className="text-muted-foreground">アカウントメール</Label>
-                <p className="font-medium">{settings?.accountEmail || "未設定"}</p>
+              <div className="space-y-2">
+                <Label htmlFor="accountEmail">アカウントメール</Label>
+                <Input
+                  id="accountEmail"
+                  type="email"
+                  placeholder="example@email.com"
+                  value={accountEmail}
+                  onChange={(e) => setAccountEmail(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  ログインに使用するメールアドレスです。変更後は新しいメールでログインしてください。
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleUpdateEmail}
+                  disabled={isSaving || !hasEmailChanges}
+                  variant="outline"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      更新中...
+                    </>
+                  ) : hasEmailChanges ? (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      メールを変更
+                    </>
+                  ) : (
+                    <>
+                      <Check className="mr-2 h-4 w-4" />
+                      保存済み
+                    </>
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -196,6 +263,30 @@ export default function Settings() {
               <p className="mt-4 text-xs text-muted-foreground">
                 ※ 通知には宛先と開封日時のみが含まれます。本文はゼロ知識設計のため、運営者も読めません。
               </p>
+            </CardContent>
+          </Card>
+
+          {/* アカウント引き継ぎ */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                アカウント引き継ぎ・復旧
+              </CardTitle>
+              <CardDescription>
+                アカウントを失うと手紙が開封できなくなる可能性があります。
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                大切な人に手紙を届けるために、解錠コードや共有リンクの保管方法を確認しておきましょう。
+              </p>
+              <Link href="/account-recovery">
+                <Button variant="outline" className="w-full">
+                  <Users className="mr-2 h-4 w-4" />
+                  引き継ぎ手順を見る
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>

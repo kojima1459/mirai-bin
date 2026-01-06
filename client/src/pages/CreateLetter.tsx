@@ -727,6 +727,8 @@ export default function CreateLetter() {
                       <SelectValue placeholder="選択してください" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="myself">自分</SelectItem>
+                      <SelectItem value="parent">親</SelectItem>
                       <SelectItem value="son">息子</SelectItem>
                       <SelectItem value="daughter">娘</SelectItem>
                       <SelectItem value="child">子ども</SelectItem>

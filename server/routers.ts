@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId, getShareTokenRecord, getActiveShareToken, createShareToken, revokeShareToken, rotateShareToken, incrementShareTokenViewCount, migrateShareTokenIfNeeded } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, updateUserEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId, getShareTokenRecord, getActiveShareToken, createShareToken, revokeShareToken, rotateShareToken, incrementShareTokenViewCount, migrateShareTokenIfNeeded } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -51,6 +51,20 @@ export const appRouter = router({
           notificationEmail: ctx.user.notificationEmail || null,
           accountEmail: ctx.user.email || null,
         };
+      }),
+
+    /**
+     * アカウントメールを変更
+     * 注意: 実際の本番環境では確認メール送信が必要
+     * 現在は簡易的に即座変更
+     */
+    updateEmail: protectedProcedure
+      .input(z.object({
+        newEmail: z.string().email(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateUserEmail(ctx.user.id, input.newEmail);
+        return { success: true };
       }),
   }),
 

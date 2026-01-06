@@ -98,6 +98,15 @@ export async function updateUserNotificationEmail(userId: number, notificationEm
   await db.update(users).set({ notificationEmail }).where(eq(users.id, userId));
 }
 
+export async function updateUserEmail(userId: number, newEmail: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(users).set({ email: newEmail }).where(eq(users.id, userId));
+}
+
 export async function getUserNotificationEmail(userId: number): Promise<string | null> {
   const db = await getDb();
   if (!db) {

@@ -190,3 +190,28 @@ describe("letter.updateSchedule", () => {
     }
   });
 });
+
+
+describe("user.updateEmail", () => {
+  it("requires authentication", async () => {
+    const { ctx } = createUnauthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.user.updateEmail({
+        newEmail: "newemail@example.com",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("requires valid email format", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.user.updateEmail({
+        newEmail: "invalid-email",
+      })
+    ).rejects.toThrow();
+  });
+});
