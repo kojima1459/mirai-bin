@@ -91,12 +91,12 @@ export function TemplateAccordion({ templates, selectedTemplate, onSelect }: Tem
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // おすすめテンプレート（上位3つ）
+  // おすすめテンプレート（上位5つ）
   const recommendedTemplates = useMemo(() => {
     return templates
       .filter(t => t.isRecommended)
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-      .slice(0, 3);
+      .slice(0, 5);
   }, [templates]);
 
   // 検索・カテゴリフィルタ

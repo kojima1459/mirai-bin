@@ -1,0 +1,40 @@
+{
+  "query": "SELECT name, displayName, sortOrder, isRecommended FROM templates WHERE isRecommended = true ORDER BY sortOrder",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user FgFwwtUbtDZZFFR.5d8a21a48e1b --database 5tqJK5rYriBnnyCGXizQtF --execute SELECT name, displayName, sortOrder, isRecommended FROM templates WHERE isRecommended = true ORDER BY sortOrder",
+  "rows": [
+    {
+      "name": "bad-night",
+      "displayName": "うまくいかない夜へ",
+      "sortOrder": "1",
+      "isRecommended": "1"
+    },
+    {
+      "name": "free-format",
+      "displayName": "自由形式",
+      "sortOrder": "1",
+      "isRecommended": "1"
+    },
+    {
+      "name": "self-hate",
+      "displayName": "自分が嫌いになった君へ",
+      "sortOrder": "2",
+      "isRecommended": "1"
+    },
+    {
+      "name": "raw-transcription",
+      "displayName": "文字起こしそのまま",
+      "sortOrder": "2",
+      "isRecommended": "1"
+    },
+    {
+      "name": "apology",
+      "displayName": "謝りたいことがある",
+      "sortOrder": "3",
+      "isRecommended": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "name\tdisplayName\tsortOrder\tisRecommended\nbad-night\tうまくいかない夜へ\t1\t1\nfree-format\t自由形式\t1\t1\nself-hate\t自分が嫌いになった君へ\t2\t1\nraw-transcription\t文字起こしそのまま\t2\t1\napology\t謝りたいことがある\t3\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1570
+}
