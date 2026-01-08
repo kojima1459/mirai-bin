@@ -283,6 +283,7 @@ export async function seedTemplates(): Promise<void> {
       subtitle: "あなたの言葉で、自由に想いを伝える",
       description: "テンプレートの形式にとらわれず、あなたの言葉で自由に手紙を書きます。口語表現や話し言葉の温かさをそのまま残します。",
       category: "milestone",
+      icon: "edit-3",
       prompt: `あなたは親が子どもに宛てた手紙を書くアシスタントです。
 以下の音声文字起こしをもとに、温かい手紙を作成してください。
 
@@ -298,7 +299,6 @@ export async function seedTemplates(): Promise<void> {
 {{transcription}}`,
       recordingPrompt: "伝えたいことを、あなたの言葉で自由に話してください。日常の会話のように、思いのままに。",
       exampleOneLiner: "あなたの言葉で、自由に想いを伝える",
-      icon: "message-circle",
       isRecommended: true,
       sortOrder: 1,
     },
@@ -308,6 +308,7 @@ export async function seedTemplates(): Promise<void> {
       subtitle: "録音した言葉を100%そのまま残す",
       description: "AIによる整形を一切行わず、文字起こし結果をそのまま手紙にします。言い間違いや「えーと」などのフィラーも含めて、あなたの声を完全に保存します。",
       category: "milestone",
+      icon: "mic-2",
       prompt: `以下の音声文字起こしを、一切変更せずにそのまま出力してください。
 
 【重要なルール】
@@ -320,7 +321,6 @@ export async function seedTemplates(): Promise<void> {
 {{transcription}}`,
       recordingPrompt: "伝えたいことを、思いのままに話してください。録音した言葉がそのまま手紙になります。",
       exampleOneLiner: "録音した言葉を100%そのまま残す",
-      icon: "mic",
       isRecommended: true,
       sortOrder: 2,
     },

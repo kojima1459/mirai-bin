@@ -27,7 +27,9 @@ import {
   Cake,
   School,
   BookOpen,
-  Briefcase
+  Briefcase,
+  Edit3,
+  Mic2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -74,6 +76,8 @@ const iconMap: Record<string, React.ReactNode> = {
   school: <School className="h-5 w-5" />,
   "book-open": <BookOpen className="h-5 w-5" />,
   briefcase: <Briefcase className="h-5 w-5" />,
+  "edit-3": <Edit3 className="h-5 w-5" />,
+  "mic-2": <Mic2 className="h-5 w-5" />,
 };
 
 const categoryLabels: Record<string, { label: string; color: string }> = {
