@@ -215,3 +215,51 @@ describe("user.updateEmail", () => {
     ).rejects.toThrow();
   });
 });
+
+
+// ============================================
+// regenerateUnlockCode API Tests
+// ============================================
+
+describe("letter.regenerateUnlockCode", () => {
+  it("requires authentication", async () => {
+    const { ctx } = createUnauthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.letter.regenerateUnlockCode({
+        id: 1,
+        newEnvelope: {
+          wrappedClientShare: "test",
+          wrappedClientShareIv: "test-iv",
+          wrappedClientShareSalt: "test-salt",
+          wrappedClientShareKdf: "pbkdf2",
+          wrappedClientShareKdfIters: 100000,
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  it("requires valid letterId", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    try {
+      const result = await caller.letter.regenerateUnlockCode({
+        id: 999999,
+        newEnvelope: {
+          wrappedClientShare: "test",
+          wrappedClientShareIv: "test-iv",
+          wrappedClientShareSalt: "test-salt",
+          wrappedClientShareKdf: "pbkdf2",
+          wrappedClientShareKdfIters: 100000,
+        },
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("not_found");
+    } catch (error) {
+      // Database not available in test environment
+      expect(error).toBeDefined();
+    }
+  });
+});

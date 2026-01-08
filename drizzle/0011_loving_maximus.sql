@@ -1,0 +1,1 @@
+ALTER TABLE `letters` ADD `unlockCodeRegeneratedAt` timestamp;

@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, updateUserEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId, getShareTokenRecord, getActiveShareToken, createShareToken, revokeShareToken, rotateShareToken, incrementShareTokenViewCount, migrateShareTokenIfNeeded } from "./db";
+import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, updateUserEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId, getShareTokenRecord, getActiveShareToken, createShareToken, revokeShareToken, rotateShareToken, incrementShareTokenViewCount, migrateShareTokenIfNeeded, regenerateUnlockCode } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -573,6 +573,53 @@ export const appRouter = router({
           success: true, 
           isFirstOpen,
         };
+      }),
+
+    /**
+     * 解錠コード再発行（セキュリティ強固版、再発行は1回のみ）
+     * 
+     * - 新しい封筒（wrappedClientShare）のみ生成
+     * - 解錠コードはDBに保存しない
+     * - 旧封筒は上書きされるため、旧コードは自動的に無効化
+     * - 2回目の再発行は禁止
+     */
+    regenerateUnlockCode: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        newEnvelope: z.object({
+          wrappedClientShare: z.string(),
+          wrappedClientShareIv: z.string(),
+          wrappedClientShareSalt: z.string(),
+          wrappedClientShareKdf: z.string(),
+          wrappedClientShareKdfIters: z.number(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const letter = await getLetterById(input.id);
+        
+        if (!letter) {
+          return { success: false, error: "not_found" };
+        }
+        
+        // 所有者チェック
+        if (letter.authorId !== ctx.user.id) {
+          return { success: false, error: "forbidden" };
+        }
+        
+        // 開封済みの手紙は再発行不可
+        if (letter.isUnlocked) {
+          return { success: false, error: "already_opened" };
+        }
+        
+        // 既に再発行済みの場合はエラー（1回のみ）
+        if (letter.unlockCodeRegeneratedAt) {
+          return { success: false, error: "already_regenerated" };
+        }
+        
+        // 再発行実行
+        await regenerateUnlockCode(input.id, input.newEnvelope);
+        
+        return { success: true };
       }),
   }),
 

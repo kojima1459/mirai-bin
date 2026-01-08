@@ -86,6 +86,9 @@ export const letters = mysqlTable("letters", {
   wrappedClientShareKdf: varchar("wrappedClientShareKdf", { length: 50 }),
   wrappedClientShareKdfIters: int("wrappedClientShareKdfIters"),
   
+  // 解錠コード再発行（1回のみ）
+  unlockCodeRegeneratedAt: timestamp("unlockCodeRegeneratedAt"),
+  
   // メタデータ
   status: varchar("status", { length: 20 }).default("draft").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

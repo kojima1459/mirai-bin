@@ -1115,3 +1115,44 @@ export async function migrateShareTokenIfNeeded(letterId: number, legacyToken: s
   // 移行: letters.shareTokenをactiveとして追加
   await createShareToken(letterId, legacyToken);
 }
+
+
+/**
+ * 解錠コードを再発行（セキュリティ強固版、再発行は1回のみ）
+ * - 新しい封筒（wrappedClientShare）のみ生成
+ * - 解錠コードはDBに保存しない
+ * - unlockCodeRegeneratedAtを設定して2回目の再発行を禁止
+ * - 旧封筒は上書きされるため、旧コードは自動的に無効化
+ * 
+ * @param letterId 手紙ID
+ * @param newEnvelope 新しい封筒データ
+ * @returns 更新結果
+ */
+export async function regenerateUnlockCode(
+  letterId: number,
+  newEnvelope: {
+    wrappedClientShare: string;
+    wrappedClientShareIv: string;
+    wrappedClientShareSalt: string;
+    wrappedClientShareKdf: string;
+    wrappedClientShareKdfIters: number;
+  }
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(letters)
+    .set({
+      wrappedClientShare: newEnvelope.wrappedClientShare,
+      wrappedClientShareIv: newEnvelope.wrappedClientShareIv,
+      wrappedClientShareSalt: newEnvelope.wrappedClientShareSalt,
+      wrappedClientShareKdf: newEnvelope.wrappedClientShareKdf,
+      wrappedClientShareKdfIters: newEnvelope.wrappedClientShareKdfIters,
+      unlockCodeRegeneratedAt: new Date(),
+    })
+    .where(eq(letters.id, letterId));
+
+  return true;
+}

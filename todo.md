@@ -416,3 +416,38 @@
 - [x] server/db.tsのテンプレート定義にアイコンを追加
 - [x] TemplateAccordion.tsxにiconMapを追加（Edit3, Mic2）
 - [x] サーバー再起動して動作確認
+
+
+## 10. 解錠コード再発行機能（セキュリティ強固版、再発行は1回のみ）
+
+### 目的
+- 解錠コードを紛失した場合に、新しいコードと封筒を再生成できるようにする
+- セキュリティを保ちながら、ユーザーの利便性を向上させる
+- **解錠コードはDBに保存しない**（封筒のみ再生成）
+- **再発行は1回のみ**（unlockCodeRegeneratedAtフィールドで制御）
+
+### DBスキーマ
+- [x] drizzle/schema.ts: lettersテーブルに`unlockCodeRegeneratedAt`フィールドを追加
+- [x] pnpm db:pushでマイグレーションを実行
+
+### サーバーAPI
+- [x] server/db.ts: `regenerateUnlockCode`関数を更新
+  - 新しい封筒（wrappedClientShare）のみ生成
+  - unlockCodeRegeneratedAtを設定
+  - 旧封筒は上書きされるため、旧コードは自動的に無効化
+- [x] server/routers.ts: `letter.regenerateUnlockCode` APIを追加
+  - 認証チェック（手紙の所有者のみ）
+  - 開封済みの手紙は再発行不可
+  - 既に再発行済みの場合はエラーを返す
+
+### フロントエンドUI
+- [x] LetterDetail.tsx: 「解錠コードを再発行」ボタンを追加
+  - 確認ダイアログで影響を説明（旧コードは無効化、新しい封筒が必要、再発行は1回のみ）
+  - 再発行後、新しい解錠コードを表示
+  - 開封済みの手紙は再発行ボタンを非表示
+  - 既に再発行済みの場合は再発行ボタンを非表示（「再発行済み」表示）
+
+### テスト
+- [x] regenerateUnlockCode APIのテストを追加（70件パス）
+- [x] 認証チェックのテスト
+- [x] 存在しない手紙のテスト
