@@ -21,6 +21,7 @@ import Login from "./pages/Login";
 import Interview from "./pages/Interview";
 import Family from "./pages/Family";
 import FamilyInvite from "./pages/FamilyInvite";
+import Landing from "./pages/Landing";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 
 // Protected route wrapper
@@ -48,6 +49,7 @@ function Router() {
       <Route path={"/login"} component={Login} />
       <Route path={"/privacy"} component={Privacy} />
       <Route path={"/terms"} component={Terms} />
+      <Route path={"/lp"} component={Landing} />
       <Route path={"/share/:token"} component={ShareLetter} />
 
       {/* Protected routes */}
