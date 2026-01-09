@@ -45,7 +45,6 @@ export function Hero() {
                             今すぐ手紙を作る
                         </Button>
                     </Link>
-                    <span className="text-sm text-white/40">登録不要で試せます</span>
                 </motion.div>
 
                 {/* Abstract Visual (CSS Audio Wave) */}

@@ -299,7 +299,6 @@ export default function Home() {
                 今すぐ手紙を作る
               </Button>
             )}
-            <span className="text-sm text-white/40">登録不要で試せます</span>
           </motion.div>
 
           {/* Abstract Visual (CSS Audio Wave) */}
