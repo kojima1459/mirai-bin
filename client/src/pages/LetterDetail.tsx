@@ -206,6 +206,185 @@ export default function LetterDetail() {
 
   const reminderDayOptions = [90, 30, 7, 1];
 
+  // 再発行後の封筒PDF出力
+  const handleExportRegeneratedPDF = (unlockCode: string, shareUrl: string | null) => {
+    if (!unlockCode) return;
+    
+    try {
+      const qrCodeUrl = shareUrl 
+        ? `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(shareUrl)}&choe=UTF-8`
+        : null;
+      
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>未来便 - 再発行封筒</title>
+            <style>
+              @media print {
+                .page { page-break-after: always; }
+                .page:last-child { page-break-after: avoid; }
+              }
+              body { 
+                font-family: 'Hiragino Kaku Gothic ProN', 'MS Gothic', sans-serif; 
+                margin: 0; 
+                padding: 40px;
+                color: #333;
+              }
+              .page { 
+                min-height: 90vh;
+                padding: 40px;
+                box-sizing: border-box;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 40px;
+                padding-bottom: 20px;
+                border-bottom: 2px solid #e67e22;
+              }
+              .header h1 {
+                color: #e67e22;
+                font-size: 28px;
+                margin: 0 0 10px 0;
+              }
+              .header .subtitle {
+                color: #666;
+                font-size: 14px;
+              }
+              .content {
+                text-align: center;
+                margin: 40px 0;
+              }
+              .qr-code {
+                margin: 30px auto;
+              }
+              .code-box {
+                font-family: 'Courier New', monospace;
+                font-size: 24px;
+                letter-spacing: 4px;
+                padding: 20px 30px;
+                background: #f8f8f8;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                display: inline-block;
+                margin: 20px 0;
+              }
+              .url-box {
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                padding: 15px;
+                background: #f8f8f8;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                word-break: break-all;
+                text-align: left;
+                margin: 20px auto;
+                max-width: 500px;
+              }
+              .warning {
+                background: #fff3cd;
+                border: 1px solid #ffc107;
+                color: #856404;
+                padding: 15px 20px;
+                border-radius: 8px;
+                margin: 30px auto;
+                max-width: 500px;
+              }
+              .warning-danger {
+                background: #f8d7da;
+                border: 1px solid #f5c6cb;
+                color: #721c24;
+              }
+              .instruction {
+                background: #e8f4fd;
+                border: 1px solid #bee5eb;
+                color: #0c5460;
+                padding: 15px 20px;
+                border-radius: 8px;
+                margin: 20px auto;
+                max-width: 500px;
+                text-align: left;
+              }
+              .regenerated-notice {
+                background: #d4edda;
+                border: 1px solid #c3e6cb;
+                color: #155724;
+                padding: 15px 20px;
+                border-radius: 8px;
+                margin: 20px auto;
+                max-width: 500px;
+              }
+            </style>
+          </head>
+          <body>
+            ${shareUrl ? `
+            <!-- ページ1: 共有リンク -->
+            <div class="page">
+              <div class="header">
+                <h1>未来便 - 共有リンク</h1>
+                <div class="subtitle">このページを受取人に渡してください</div>
+              </div>
+              <div class="content">
+                <p>以下のQRコードまたはURLから手紙を開けます</p>
+                <div class="qr-code">
+                  <img src="${qrCodeUrl}" alt="QRコード" width="200" height="200" />
+                </div>
+                <div class="url-box">${shareUrl}</div>
+              </div>
+              <div class="warning">
+                <strong>重要:</strong> 解錠コードはこのページには記載されていません。<br>
+                解錠コードは別の経路（別のメッセージ、別の紙）で伝えてください。
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- ページ2: 解錠コード -->
+            <div class="page">
+              <div class="header">
+                <h1>未来便 - 解錠コード（再発行）</h1>
+                <div class="subtitle">このページを受取人に渡してください（共有リンクとは別経路で）</div>
+              </div>
+              <div class="content">
+                <div class="regenerated-notice">
+                  <strong>再発行された解錠コードです</strong><br>
+                  以前の解錠コードは無効になっています。
+                </div>
+                <p>手紙を開封するためのコードです</p>
+                <div class="code-box">${unlockCode}</div>
+              </div>
+              <div class="instruction">
+                <strong>使い方:</strong><br>
+                1. 共有リンクから手紙のページを開く<br>
+                2. 「解錠コードを入力」欄に上記のコードを入力<br>
+                3. 「開封する」ボタンを押す
+              </div>
+              <div class="warning warning-danger">
+                <strong>警告:</strong> このコードを紛失すると、手紙を開封できなくなります。<br>
+                安全な場所に保管してください。<br>
+                <strong>再発行は1回のみです。これ以上の再発行はできません。</strong>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+      
+      const printWindow = window.open('', '', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        // 画像読み込み待機後に印刷
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+        toast.success("印刷ダイアログを開きました。各ページを別々に保管してください。");
+      }
+    } catch (err) {
+      console.error("PDF出力エラー:", err);
+      toast.error("PDF出力に失敗しました");
+    }
+  };
+
   if (authLoading || letterLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -717,16 +896,14 @@ export default function LetterDetail() {
                         このコードは一度だけ表示されます。必ずメモしてください。
                       </p>
                     </div>
-                    {regeneratedEnvelopeUrl && (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => window.open(regeneratedEnvelopeUrl, "_blank")}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        新しい封筒PDFをダウンロード
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => handleExportRegeneratedPDF(regeneratedCode, shareUrl)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      新しい封筒PDFをダウンロード
+                    </Button>
                   </div>
                 ) : (
                   // 再発行ボタン
@@ -789,8 +966,9 @@ export default function LetterDetail() {
                                 });
                                 
                                 setRegeneratedCode(newCode);
-                                // TODO: 封筒PDFの生成とURLの設定
-                                // setRegeneratedEnvelopeUrl(pdfUrl);
+                                setShowRegenerateDialog(false);
+                                setIsRegenerating(false);
+                                toast.success("新しい解錠コードを発行しました。封筒PDFをダウンロードしてください。");
                               } catch (error) {
                                 console.error("Failed to regenerate unlock code:", error);
                                 toast.error("解錠コードの再発行に失敗しました");

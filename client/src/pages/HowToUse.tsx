@@ -12,7 +12,10 @@ import {
   Clock,
   Shield,
   FileText,
-  Home
+  Home,
+  RefreshCw,
+  Settings,
+  Link2
 } from "lucide-react";
 
 export default function HowToUse() {
@@ -157,6 +160,60 @@ export default function HowToUse() {
               )}
             </Card>
           ))}
+        </div>
+
+        {/* 便利な機能 */}
+        <div className="mt-16 max-w-4xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-8">便利な機能</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-2">
+                  <Settings className="h-6 w-6" />
+                </div>
+                <CardTitle className="text-lg">スケジュール変更</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  開封日時やリマインダーは後から変更できます。
+                  「マイレター」から手紙の詳細を開き、「スケジュール設定」で変更できます。
+                  ※開封済みの手紙は変更できません。
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center mb-2">
+                  <RefreshCw className="h-6 w-6" />
+                </div>
+                <CardTitle className="text-lg">解錠コード再発行</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  解錠コードを紛失した場合、1回だけ再発行できます。
+                  再発行後は新しい封筒PDFをダウンロードしてください。
+                  旧コードは無効になります。
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mb-2">
+                  <Link2 className="h-6 w-6" />
+                </div>
+                <CardTitle className="text-lg">共有リンク管理</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  共有リンクは無効化・再発行が可能です。
+                  リンクが漏れた場合や、受取人を変更したい場合に便利です。
+                  旧リンクは自動的に無効になります。
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* 重要な概念 */}
