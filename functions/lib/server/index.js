@@ -120,6 +120,97 @@ var init_notification = __esm({
   }
 });
 
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import path2 from "path";
+import { defineConfig } from "vite";
+var plugins, vite_config_default;
+var init_vite_config = __esm({
+  "vite.config.ts"() {
+    "use strict";
+    plugins = [react(), tailwindcss()];
+    vite_config_default = defineConfig({
+      plugins,
+      resolve: {
+        alias: {
+          "@": path2.resolve(import.meta.dirname, "client", "src"),
+          "@shared": path2.resolve(import.meta.dirname, "shared"),
+          "@assets": path2.resolve(import.meta.dirname, "attached_assets")
+        }
+      },
+      envDir: path2.resolve(import.meta.dirname),
+      root: path2.resolve(import.meta.dirname, "client"),
+      publicDir: path2.resolve(import.meta.dirname, "client", "public"),
+      build: {
+        outDir: path2.resolve(import.meta.dirname, "dist/public"),
+        emptyOutDir: true
+      },
+      server: {
+        host: true,
+        proxy: {
+          // Proxy API requests to the Express server in development
+          "/api": {
+            target: "http://localhost:3000",
+            changeOrigin: true
+          }
+        }
+      }
+    });
+  }
+});
+
+// server/_core/vite.ts
+var vite_exports = {};
+__export(vite_exports, {
+  setupVite: () => setupVite
+});
+import fs2 from "fs";
+import { nanoid as nanoid2 } from "nanoid";
+import path3 from "path";
+import { createServer as createViteServer } from "vite";
+async function setupVite(app2, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const vite = await createViteServer({
+    ...vite_config_default,
+    configFile: false,
+    server: serverOptions,
+    appType: "custom"
+  });
+  app2.use(vite.middlewares);
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path3.resolve(
+        import.meta.dirname,
+        "../..",
+        "client",
+        "index.html"
+      );
+      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid2()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+var init_vite = __esm({
+  "server/_core/vite.ts"() {
+    "use strict";
+    init_vite_config();
+  }
+});
+
 // server/_core/index.ts
 import "dotenv/config";
 import express2 from "express";
@@ -216,7 +307,7 @@ var systemRouter = router({
 import { z as z2 } from "zod";
 
 // server/db.ts
-import { eq, and, desc } from "drizzle-orm";
+import { eq as eq3, and as and3, desc as desc2 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // drizzle/schema.ts
@@ -237,12 +328,25 @@ var users = mysqlTable("users", {
 var letters = mysqlTable("letters", {
   id: int("id").autoincrement().primaryKey(),
   authorId: int("authorId").notNull(),
+  // 公開スコープ: private(自分のみ), family(家族グループ), link(URL共有)
+  visibilityScope: mysqlEnum("visibilityScope", ["private", "family", "link"]).default("private").notNull(),
+  familyId: int("familyId"),
+  // FAMILYスコープ時のみ設定
   // 受取人情報
   recipientName: varchar("recipientName", { length: 100 }),
   recipientRelation: varchar("recipientRelation", { length: 50 }),
   // 音声データ（URL参照のみ、本文は保存しない）
   audioUrl: varchar("audioUrl", { length: 500 }),
   audioDuration: int("audioDuration"),
+  // 暗号化済み音声（ゼロ知識設計）
+  // - クライアント側で暗号化された音声の保存先URL
+  // - 復号鍵はmasterKeyからHKDFで導出（本文とは別キー）
+  encryptedAudioUrl: varchar("encryptedAudioUrl", { length: 500 }),
+  encryptedAudioIv: varchar("encryptedAudioIv", { length: 255 }),
+  encryptedAudioMimeType: varchar("encryptedAudioMimeType", { length: 100 }),
+  encryptedAudioByteSize: int("encryptedAudioByteSize"),
+  encryptedAudioDurationSec: int("encryptedAudioDurationSec"),
+  encryptedAudioCryptoVersion: varchar("encryptedAudioCryptoVersion", { length: 20 }),
   // テンプレート情報（本文は保存しない）
   templateUsed: varchar("templateUsed", { length: 50 }),
   // 暗号化関連（ゼロ知識: 暗号文のみ保存）
@@ -371,9 +475,212 @@ var letterShareTokens = mysqlTable("letter_share_tokens", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   revokedAt: timestamp("revokedAt")
 });
+var families = mysqlTable("families", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerUserId: int("ownerUserId").notNull(),
+  name: varchar("name", { length: 100 }).default("\u30DE\u30A4\u30D5\u30A1\u30DF\u30EA\u30FC"),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
+});
+var familyMembers = mysqlTable("family_members", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["owner", "member"]).default("member").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
+});
+var familyInvites = mysqlTable("family_invites", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: mysqlEnum("status", ["pending", "accepted", "revoked"]).default("pending").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
+});
+var interviewSessions = mysqlTable("interview_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  recipientName: varchar("recipientName", { length: 100 }),
+  // 誰宛か
+  topic: varchar("topic", { length: 100 }),
+  // 話題（自分史、感謝、謝罪etc）
+  status: mysqlEnum("status", ["active", "completed"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
+});
+var interviewMessages = mysqlTable("interview_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  sender: mysqlEnum("sender", ["ai", "user"]).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
+});
 
 // server/db.ts
 init_env();
+
+// server/db_share_token.ts
+import { eq, and } from "drizzle-orm";
+async function getShareTokenRecord(db, token) {
+  const result = await db.select().from(letterShareTokens).where(eq(letterShareTokens.token, token)).limit(1);
+  return result[0];
+}
+async function getActiveShareToken(db, letterId) {
+  const result = await db.select().from(letterShareTokens).where(and(
+    eq(letterShareTokens.letterId, letterId),
+    eq(letterShareTokens.status, "active")
+  )).limit(1);
+  return result[0];
+}
+async function createShareToken(db, letterId, token) {
+  const existingActive = await getActiveShareToken(db, letterId);
+  if (existingActive) {
+    await db.update(letterShareTokens).set({
+      status: "rotated",
+      revokedAt: /* @__PURE__ */ new Date(),
+      replacedByToken: token
+    }).where(eq(letterShareTokens.id, existingActive.id));
+  }
+  await db.insert(letterShareTokens).values({
+    token,
+    letterId,
+    status: "active",
+    viewCount: 0
+  });
+  return { success: true, token };
+}
+async function revokeShareToken(db, letterId, reason) {
+  const activeToken = await getActiveShareToken(db, letterId);
+  if (!activeToken) {
+    return { success: true, wasActive: false };
+  }
+  await db.update(letterShareTokens).set({
+    status: "revoked",
+    revokedAt: /* @__PURE__ */ new Date(),
+    revokeReason: reason || null
+  }).where(and(
+    eq(letterShareTokens.id, activeToken.id),
+    eq(letterShareTokens.status, "active")
+  ));
+  return { success: true, wasActive: true };
+}
+async function rotateShareToken(db, letterId, newToken) {
+  const activeToken = await getActiveShareToken(db, letterId);
+  if (activeToken) {
+    await db.update(letterShareTokens).set({
+      status: "rotated",
+      revokedAt: /* @__PURE__ */ new Date(),
+      replacedByToken: newToken
+    }).where(and(
+      eq(letterShareTokens.id, activeToken.id),
+      eq(letterShareTokens.status, "active")
+    ));
+  }
+  await createShareToken(db, letterId, newToken);
+  return {
+    success: true,
+    newToken,
+    oldToken: activeToken?.token
+  };
+}
+async function incrementShareTokenViewCount(db, token) {
+  const tokenRecord = await getShareTokenRecord(db, token);
+  if (!tokenRecord) return;
+  await db.update(letterShareTokens).set({
+    viewCount: tokenRecord.viewCount + 1,
+    lastAccessedAt: /* @__PURE__ */ new Date()
+  }).where(eq(letterShareTokens.token, token));
+}
+async function migrateShareTokenIfNeeded(db, letterId, legacyToken) {
+  const existingActive = await getActiveShareToken(db, letterId);
+  if (existingActive) return;
+  const existingToken = await getShareTokenRecord(db, legacyToken);
+  if (existingToken) return;
+  await createShareToken(db, letterId, legacyToken);
+}
+
+// server/db_reminder.ts
+import { eq as eq2, and as and2 } from "drizzle-orm";
+async function getRemindersByLetterId(db, letterId) {
+  return await db.select().from(letterReminders).where(eq2(letterReminders.letterId, letterId)).orderBy(letterReminders.daysBefore);
+}
+async function getPendingReminders(db, limit = 100) {
+  const now = /* @__PURE__ */ new Date();
+  const reminders = await db.select().from(letterReminders).where(and2(
+    eq2(letterReminders.status, "pending")
+    // scheduledAt <= now condition is handled by filter below for test simplicity if needed,
+    // but in real DB query we want it in WHERE.
+    // Drizzle Mock is tricky here. 
+    // Current implementation fetches by status='pending' then filters in JS?
+    // No, let's keep it consistent with original code which fetches then filters in JS mostly?
+    // Original code:
+    // .where(and(eq(letterReminders.status, "pending")))
+    // .limit(limit);
+    // const filteredReminders = reminders.filter(r => r.scheduledAt <= now);
+    // It seems original code was doing filtering in memory too for the date part?
+    // Yes, see L803 in original db.ts view.
+  )).limit(limit);
+  const filteredReminders = reminders.filter((r) => r.scheduledAt <= now);
+  const result = await Promise.all(filteredReminders.map(async (reminder) => {
+    const letter = await db.select().from(letters).where(eq2(letters.id, reminder.letterId)).limit(1);
+    const user = await db.select({
+      email: users.email,
+      notificationEmail: users.notificationEmail
+    }).from(users).where(eq2(users.id, reminder.ownerUserId)).limit(1);
+    return {
+      ...reminder,
+      letter: letter[0] || null,
+      user: user[0] || null
+    };
+  }));
+  return result;
+}
+async function markReminderAsSent(db, reminderId) {
+  const result = await db.update(letterReminders).set({
+    sentAt: /* @__PURE__ */ new Date(),
+    status: "sent"
+  }).where(and2(
+    eq2(letterReminders.id, reminderId),
+    eq2(letterReminders.status, "pending")
+  ));
+  return (result[0]?.affectedRows ?? 0) > 0;
+}
+async function markReminderAsFailed(db, reminderId, error) {
+  await db.update(letterReminders).set({
+    status: "failed",
+    lastError: error
+  }).where(eq2(letterReminders.id, reminderId));
+}
+async function updateLetterReminders(db, letterId, ownerUserId, unlockAt, daysBeforeList) {
+  const existingReminders = await db.select().from(letterReminders).where(eq2(letterReminders.letterId, letterId));
+  const sentReminders = existingReminders.filter((r) => r.status === "sent");
+  const sentDaysBefore = new Set(sentReminders.map((r) => r.daysBefore));
+  await db.delete(letterReminders).where(and2(
+    eq2(letterReminders.letterId, letterId),
+    eq2(letterReminders.status, "pending")
+  ));
+  for (const daysBefore of daysBeforeList) {
+    if (sentDaysBefore.has(daysBefore)) {
+      continue;
+    }
+    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1e3);
+    if (scheduledAt <= /* @__PURE__ */ new Date()) {
+      continue;
+    }
+    await db.insert(letterReminders).values({
+      letterId,
+      ownerUserId,
+      type: "before_unlock",
+      daysBefore,
+      scheduledAt,
+      status: "pending"
+    });
+  }
+}
+async function deleteRemindersByLetterId(db, letterId) {
+  await db.delete(letterReminders).where(eq2(letterReminders.letterId, letterId));
+}
+
+// server/db.ts
 var _db = null;
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -440,7 +747,7 @@ async function getUserByOpenId(openId) {
     console.warn("[Database] Cannot get user: database not available");
     return void 0;
   }
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db.select().from(users).where(eq3(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function updateUserNotificationEmail(userId, notificationEmail) {
@@ -448,14 +755,14 @@ async function updateUserNotificationEmail(userId, notificationEmail) {
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.update(users).set({ notificationEmail }).where(eq(users.id, userId));
+  await db.update(users).set({ notificationEmail }).where(eq3(users.id, userId));
 }
 async function updateUserEmail(userId, newEmail) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.update(users).set({ email: newEmail }).where(eq(users.id, userId));
+  await db.update(users).set({ email: newEmail }).where(eq3(users.id, userId));
 }
 async function createLetter(letter) {
   const db = await getDb();
@@ -470,36 +777,29 @@ async function getLetterById(id) {
   if (!db) {
     return void 0;
   }
-  const result = await db.select().from(letters).where(eq(letters.id, id)).limit(1);
+  const result = await db.select().from(letters).where(eq3(letters.id, id)).limit(1);
   return result.length > 0 ? result[0] : void 0;
-}
-async function getLettersByAuthor(authorId) {
-  const db = await getDb();
-  if (!db) {
-    return [];
-  }
-  return await db.select().from(letters).where(eq(letters.authorId, authorId)).orderBy(desc(letters.createdAt));
 }
 async function updateLetter(id, updates) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.update(letters).set(updates).where(eq(letters.id, id));
+  await db.update(letters).set(updates).where(eq3(letters.id, id));
 }
 async function deleteLetter(id) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.delete(letters).where(eq(letters.id, id));
+  await db.delete(letters).where(eq3(letters.id, id));
 }
 async function getLetterByShareToken(shareToken) {
   const db = await getDb();
   if (!db) {
     return void 0;
   }
-  const result = await db.select().from(letters).where(eq(letters.shareToken, shareToken)).limit(1);
+  const result = await db.select().from(letters).where(eq3(letters.shareToken, shareToken)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function updateLetterShareToken(id, shareToken) {
@@ -507,7 +807,7 @@ async function updateLetterShareToken(id, shareToken) {
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.update(letters).set({ shareToken }).where(eq(letters.id, id));
+  await db.update(letters).set({ shareToken }).where(eq3(letters.id, id));
 }
 async function incrementViewCount(id) {
   const db = await getDb();
@@ -519,7 +819,7 @@ async function incrementViewCount(id) {
     await db.update(letters).set({
       viewCount: letter.viewCount + 1,
       lastViewedAt: /* @__PURE__ */ new Date()
-    }).where(eq(letters.id, id));
+    }).where(eq3(letters.id, id));
   }
 }
 async function unlockLetter(id) {
@@ -530,7 +830,7 @@ async function unlockLetter(id) {
   const result = await db.update(letters).set({
     isUnlocked: true,
     unlockedAt: /* @__PURE__ */ new Date()
-  }).where(and(eq(letters.id, id), eq(letters.isUnlocked, false)));
+  }).where(and3(eq3(letters.id, id), eq3(letters.isUnlocked, false)));
   return result[0]?.affectedRows > 0;
 }
 async function getAllTemplates() {
@@ -545,7 +845,7 @@ async function getTemplateByName(name) {
   if (!db) {
     return void 0;
   }
-  const result = await db.select().from(templates).where(eq(templates.name, name)).limit(1);
+  const result = await db.select().from(templates).where(eq3(templates.name, name)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function seedTemplates() {
@@ -919,227 +1219,94 @@ async function getDraftsByUser(userId) {
   if (!db) {
     return [];
   }
-  return await db.select().from(drafts).where(eq(drafts.userId, userId)).orderBy(desc(drafts.updatedAt));
+  return await db.select().from(drafts).where(eq3(drafts.userId, userId)).orderBy(desc2(drafts.updatedAt));
 }
 async function updateDraft(id, updates) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.update(drafts).set(updates).where(eq(drafts.id, id));
+  await db.update(drafts).set(updates).where(eq3(drafts.id, id));
 }
 async function deleteDraft(id) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
-  await db.delete(drafts).where(eq(drafts.id, id));
+  await db.delete(drafts).where(eq3(drafts.id, id));
 }
 async function getDraftByUserAndId(userId, draftId) {
   const db = await getDb();
   if (!db) {
     return void 0;
   }
-  const result = await db.select().from(drafts).where(and(eq(drafts.id, draftId), eq(drafts.userId, userId))).limit(1);
+  const result = await db.select().from(drafts).where(and3(eq3(drafts.id, draftId), eq3(drafts.userId, userId))).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
-async function getRemindersByLetterId(letterId) {
+async function getRemindersByLetterId2(letterId) {
   const db = await getDb();
-  if (!db) {
-    return [];
-  }
-  return await db.select().from(letterReminders).where(eq(letterReminders.letterId, letterId)).orderBy(letterReminders.daysBefore);
+  if (!db) return [];
+  return getRemindersByLetterId(db, letterId);
 }
-async function getPendingReminders(limit = 100) {
+async function getPendingReminders2(limit = 100) {
   const db = await getDb();
-  if (!db) {
-    return [];
-  }
-  const now = /* @__PURE__ */ new Date();
-  const reminders = await db.select().from(letterReminders).where(and(
-    eq(letterReminders.status, "pending")
-    // scheduledAt <= now
-  )).limit(limit);
-  const filteredReminders = reminders.filter((r) => r.scheduledAt <= now);
-  const result = await Promise.all(filteredReminders.map(async (reminder) => {
-    const letter = await db.select().from(letters).where(eq(letters.id, reminder.letterId)).limit(1);
-    const user = await db.select({
-      email: users.email,
-      notificationEmail: users.notificationEmail
-    }).from(users).where(eq(users.id, reminder.ownerUserId)).limit(1);
-    return {
-      ...reminder,
-      letter: letter[0] || null,
-      user: user[0] || null
-    };
-  }));
-  return result;
+  if (!db) return [];
+  return getPendingReminders(db, limit);
 }
-async function markReminderAsSent(reminderId) {
+async function markReminderAsSent2(reminderId) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const result = await db.update(letterReminders).set({
-    sentAt: /* @__PURE__ */ new Date(),
-    status: "sent"
-  }).where(and(
-    eq(letterReminders.id, reminderId),
-    eq(letterReminders.status, "pending")
-  ));
-  return (result[0].affectedRows ?? 0) > 0;
+  if (!db) throw new Error("Database not available");
+  return markReminderAsSent(db, reminderId);
 }
-async function markReminderAsFailed(reminderId, error) {
+async function markReminderAsFailed2(reminderId, error) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  await db.update(letterReminders).set({
-    status: "failed",
-    lastError: error
-  }).where(eq(letterReminders.id, reminderId));
+  if (!db) throw new Error("Database not available");
+  return markReminderAsFailed(db, reminderId, error);
 }
-async function updateLetterReminders(letterId, ownerUserId, unlockAt, daysBeforeList) {
+async function updateLetterReminders2(letterId, ownerUserId, unlockAt, daysBeforeList) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const existingReminders = await db.select().from(letterReminders).where(eq(letterReminders.letterId, letterId));
-  const sentReminders = existingReminders.filter((r) => r.status === "sent");
-  const sentDaysBefore = new Set(sentReminders.map((r) => r.daysBefore));
-  await db.delete(letterReminders).where(and(
-    eq(letterReminders.letterId, letterId),
-    eq(letterReminders.status, "pending")
-  ));
-  for (const daysBefore of daysBeforeList) {
-    if (sentDaysBefore.has(daysBefore)) {
-      continue;
-    }
-    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1e3);
-    if (scheduledAt <= /* @__PURE__ */ new Date()) {
-      continue;
-    }
-    await db.insert(letterReminders).values({
-      letterId,
-      ownerUserId,
-      type: "before_unlock",
-      daysBefore,
-      scheduledAt,
-      status: "pending"
-    });
-  }
+  if (!db) throw new Error("Database not available");
+  return updateLetterReminders(db, letterId, ownerUserId, unlockAt, daysBeforeList);
 }
-async function deleteRemindersByLetterId(letterId) {
+async function deleteRemindersByLetterId2(letterId) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  await db.delete(letterReminders).where(eq(letterReminders.letterId, letterId));
+  if (!db) throw new Error("Database not available");
+  return deleteRemindersByLetterId(db, letterId);
 }
-async function getShareTokenRecord(token) {
+async function getShareTokenRecord2(token) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const result = await db.select().from(letterShareTokens).where(eq(letterShareTokens.token, token)).limit(1);
-  return result[0];
+  if (!db) throw new Error("Database not available");
+  return getShareTokenRecord(db, token);
 }
-async function getActiveShareToken(letterId) {
+async function getActiveShareToken2(letterId) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const result = await db.select().from(letterShareTokens).where(and(
-    eq(letterShareTokens.letterId, letterId),
-    eq(letterShareTokens.status, "active")
-  )).limit(1);
-  return result[0];
+  if (!db) throw new Error("Database not available");
+  return getActiveShareToken(db, letterId);
 }
-async function createShareToken(letterId, token) {
+async function createShareToken2(letterId, token) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const existingActive = await getActiveShareToken(letterId);
-  if (existingActive) {
-    await db.update(letterShareTokens).set({
-      status: "rotated",
-      revokedAt: /* @__PURE__ */ new Date(),
-      replacedByToken: token
-    }).where(eq(letterShareTokens.id, existingActive.id));
-  }
-  await db.insert(letterShareTokens).values({
-    token,
-    letterId,
-    status: "active",
-    viewCount: 0
-  });
-  return { success: true, token };
+  if (!db) throw new Error("Database not available");
+  return createShareToken(db, letterId, token);
 }
-async function revokeShareToken(letterId, reason) {
+async function revokeShareToken2(letterId, reason) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const activeToken = await getActiveShareToken(letterId);
-  if (!activeToken) {
-    return { success: true, wasActive: false };
-  }
-  await db.update(letterShareTokens).set({
-    status: "revoked",
-    revokedAt: /* @__PURE__ */ new Date(),
-    revokeReason: reason || null
-  }).where(and(
-    eq(letterShareTokens.id, activeToken.id),
-    eq(letterShareTokens.status, "active")
-  ));
-  return { success: true, wasActive: true };
+  if (!db) throw new Error("Database not available");
+  return revokeShareToken(db, letterId, reason);
 }
-async function rotateShareToken(letterId, newToken) {
+async function rotateShareToken2(letterId, newToken) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const activeToken = await getActiveShareToken(letterId);
-  if (activeToken) {
-    await db.update(letterShareTokens).set({
-      status: "rotated",
-      revokedAt: /* @__PURE__ */ new Date(),
-      replacedByToken: newToken
-    }).where(and(
-      eq(letterShareTokens.id, activeToken.id),
-      eq(letterShareTokens.status, "active")
-    ));
-  }
-  await createShareToken(letterId, newToken);
-  return {
-    success: true,
-    newToken,
-    oldToken: activeToken?.token
-  };
+  if (!db) throw new Error("Database not available");
+  return rotateShareToken(db, letterId, newToken);
 }
-async function incrementShareTokenViewCount(token) {
+async function incrementShareTokenViewCount2(token) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const tokenRecord = await getShareTokenRecord(token);
-  if (!tokenRecord) return;
-  await db.update(letterShareTokens).set({
-    viewCount: tokenRecord.viewCount + 1,
-    lastAccessedAt: /* @__PURE__ */ new Date()
-  }).where(eq(letterShareTokens.token, token));
+  if (!db) throw new Error("Database not available");
+  return incrementShareTokenViewCount(db, token);
 }
-async function migrateShareTokenIfNeeded(letterId, legacyToken) {
+async function migrateShareTokenIfNeeded2(letterId, legacyToken) {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const existingActive = await getActiveShareToken(letterId);
-  if (existingActive) return;
-  const existingToken = await getShareTokenRecord(legacyToken);
-  if (existingToken) return;
-  await createShareToken(letterId, legacyToken);
+  if (!db) throw new Error("Database not available");
+  return migrateShareTokenIfNeeded(db, letterId, legacyToken);
 }
 async function regenerateUnlockCode(letterId, newEnvelope) {
   const db = await getDb();
@@ -1153,8 +1320,185 @@ async function regenerateUnlockCode(letterId, newEnvelope) {
     wrappedClientShareKdf: newEnvelope.wrappedClientShareKdf,
     wrappedClientShareKdfIters: newEnvelope.wrappedClientShareKdfIters,
     unlockCodeRegeneratedAt: /* @__PURE__ */ new Date()
-  }).where(eq(letters.id, letterId));
+  }).where(eq3(letters.id, letterId));
   return true;
+}
+async function getUserFamilyIds(userId) {
+  const db = await getDb();
+  if (!db) return [];
+  const memberships = await db.select({ familyId: familyMembers.familyId }).from(familyMembers).where(eq3(familyMembers.userId, userId));
+  return memberships.map((m) => m.familyId);
+}
+async function isUserFamilyMember(userId, familyId) {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select({ id: familyMembers.id }).from(familyMembers).where(and3(eq3(familyMembers.userId, userId), eq3(familyMembers.familyId, familyId))).limit(1);
+  return result.length > 0;
+}
+async function getLettersByScope(userId, scope) {
+  const db = await getDb();
+  if (!db) return [];
+  if (scope === "private") {
+    return await db.select().from(letters).where(and3(
+      eq3(letters.authorId, userId),
+      eq3(letters.visibilityScope, "private")
+    )).orderBy(desc2(letters.createdAt));
+  }
+  if (scope === "family") {
+    const familyIds = await getUserFamilyIds(userId);
+    if (familyIds.length === 0) return [];
+    const result = [];
+    for (const fid of familyIds) {
+      const familyLetters = await db.select().from(letters).where(and3(
+        eq3(letters.familyId, fid),
+        eq3(letters.visibilityScope, "family")
+      )).orderBy(desc2(letters.createdAt));
+      result.push(...familyLetters);
+    }
+    return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  if (scope === "link") {
+    return await db.select().from(letters).where(and3(
+      eq3(letters.authorId, userId),
+      eq3(letters.visibilityScope, "link")
+    )).orderBy(desc2(letters.createdAt));
+  }
+  return [];
+}
+async function createFamily(ownerUserId, name) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(families).values({
+    ownerUserId,
+    name: name || "\u30DE\u30A4\u30D5\u30A1\u30DF\u30EA\u30FC"
+  });
+  const familyId = result[0].insertId;
+  await db.insert(familyMembers).values({
+    familyId,
+    userId: ownerUserId,
+    role: "owner"
+  });
+  return familyId;
+}
+async function getFamilyByOwner(ownerUserId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(families).where(eq3(families.ownerUserId, ownerUserId)).limit(1);
+  return result[0];
+}
+async function getFamilyMemberships(userId) {
+  const db = await getDb();
+  if (!db) return [];
+  const membershipIds = await getUserFamilyIds(userId);
+  if (membershipIds.length === 0) return [];
+  const result = [];
+  for (const fid of membershipIds) {
+    const family = await db.select().from(families).where(eq3(families.id, fid)).limit(1);
+    if (family[0]) result.push(family[0]);
+  }
+  return result;
+}
+async function getFamilyMembers(familyId) {
+  const db = await getDb();
+  if (!db) return [];
+  const members = await db.select().from(familyMembers).where(eq3(familyMembers.familyId, familyId));
+  const result = await Promise.all(members.map(async (m) => {
+    const user = await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq3(users.id, m.userId)).limit(1);
+    return { ...m, user: user[0] || void 0 };
+  }));
+  return result;
+}
+async function createFamilyInvite(familyId, invitedEmail, token, expiresAt) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(familyInvites).values({
+    familyId,
+    invitedEmail,
+    token,
+    expiresAt
+  });
+  return result[0].insertId;
+}
+async function getFamilyInviteByToken(token) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(familyInvites).where(eq3(familyInvites.token, token)).limit(1);
+  return result[0];
+}
+async function acceptFamilyInvite(token, userId) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const invite = await getFamilyInviteByToken(token);
+  if (!invite) {
+    return { success: false, error: "\u62DB\u5F85\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093" };
+  }
+  if (invite.status !== "pending") {
+    return { success: false, error: "\u3053\u306E\u62DB\u5F85\u306F\u65E2\u306B\u4F7F\u7528\u6E08\u307F\u3067\u3059" };
+  }
+  if (/* @__PURE__ */ new Date() > invite.expiresAt) {
+    return { success: false, error: "\u3053\u306E\u62DB\u5F85\u306F\u671F\u9650\u5207\u308C\u3067\u3059" };
+  }
+  const alreadyMember = await isUserFamilyMember(userId, invite.familyId);
+  if (alreadyMember) {
+    return { success: false, error: "\u65E2\u306B\u3053\u306E\u30D5\u30A1\u30DF\u30EA\u30FC\u306E\u30E1\u30F3\u30D0\u30FC\u3067\u3059" };
+  }
+  await db.insert(familyMembers).values({
+    familyId: invite.familyId,
+    userId,
+    role: "member"
+  });
+  await db.update(familyInvites).set({ status: "accepted" }).where(eq3(familyInvites.id, invite.id));
+  return { success: true };
+}
+async function getFamilyInvites(familyId) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(familyInvites).where(eq3(familyInvites.familyId, familyId)).orderBy(desc2(familyInvites.createdAt));
+}
+async function createInterviewSession(userId, recipientName, topic) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(interviewSessions).values({
+    userId,
+    recipientName: recipientName || "\u8AB0\u304B",
+    topic: topic || "\u81EA\u5206\u53F2",
+    status: "active"
+  });
+  return result[0].insertId;
+}
+async function getInterviewSession(sessionId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(interviewSessions).where(eq3(interviewSessions.id, sessionId)).limit(1);
+  return result[0];
+}
+async function getActiveInterviewSession(userId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(interviewSessions).where(and3(
+    eq3(interviewSessions.userId, userId),
+    eq3(interviewSessions.status, "active")
+  )).orderBy(desc2(interviewSessions.createdAt)).limit(1);
+  return result[0];
+}
+async function addInterviewMessage(sessionId, sender, content) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(interviewMessages).values({
+    sessionId,
+    sender,
+    content
+  });
+}
+async function getInterviewHistory(sessionId) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(interviewMessages).where(eq3(interviewMessages.sessionId, sessionId)).orderBy(interviewMessages.createdAt);
+}
+async function completeInterviewSession(sessionId) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(interviewSessions).set({ status: "completed" }).where(eq3(interviewSessions.id, sessionId));
 }
 
 // server/_core/llm.ts
@@ -1633,6 +1977,13 @@ var appRouter = router({
       // 暗号化関連（本文は送らない）
       encryptionIv: z2.string(),
       ciphertextUrl: z2.string(),
+      // 暗号化済み音声（ゼロ知識）
+      encryptedAudioUrl: z2.string().optional(),
+      encryptedAudioIv: z2.string().optional(),
+      encryptedAudioMimeType: z2.string().optional(),
+      encryptedAudioByteSize: z2.number().optional(),
+      encryptedAudioDurationSec: z2.number().optional(),
+      encryptedAudioCryptoVersion: z2.string().optional(),
       // 証跡
       proofHash: z2.string(),
       // タイムロック
@@ -1640,8 +1991,11 @@ var appRouter = router({
       unlockPolicy: z2.string().optional(),
       // Shamir（クライアント分割済み）
       useShamir: z2.boolean().default(true),
-      serverShare: z2.string()
+      serverShare: z2.string(),
       // クライアントで分割済みのserverShare
+      // 公開スコープ
+      visibilityScope: z2.enum(["private", "family", "link"]).default("private"),
+      familyId: z2.number().nullable().optional()
     })).mutation(async ({ ctx, input }) => {
       const letterId = await createLetter({
         authorId: ctx.user.id,
@@ -1652,6 +2006,13 @@ var appRouter = router({
         templateUsed: input.templateUsed,
         encryptionIv: input.encryptionIv,
         ciphertextUrl: input.ciphertextUrl,
+        // 暗号化済み音声
+        encryptedAudioUrl: input.encryptedAudioUrl,
+        encryptedAudioIv: input.encryptedAudioIv,
+        encryptedAudioMimeType: input.encryptedAudioMimeType,
+        encryptedAudioByteSize: input.encryptedAudioByteSize,
+        encryptedAudioDurationSec: input.encryptedAudioDurationSec,
+        encryptedAudioCryptoVersion: input.encryptedAudioCryptoVersion,
         proofHash: input.proofHash,
         unlockAt: input.unlockAt,
         unlockPolicy: input.unlockPolicy || "datetime",
@@ -1659,7 +2020,10 @@ var appRouter = router({
         proofCreatedAt: /* @__PURE__ */ new Date(),
         // Shamirシェア（serverShareのみ保存）
         serverShare: input.serverShare,
-        useShamir: input.useShamir
+        useShamir: input.useShamir,
+        // 公開スコープ
+        visibilityScope: input.visibilityScope,
+        familyId: input.familyId ?? null
       });
       stampHash(input.proofHash, letterId).then(async (result) => {
         if (result.success && result.otsFileUrl) {
@@ -1706,8 +2070,8 @@ var appRouter = router({
       if (letter.authorId !== ctx.user.id) return null;
       return letter;
     }),
-    list: protectedProcedure.query(async ({ ctx }) => {
-      return await getLettersByAuthor(ctx.user.id);
+    list: protectedProcedure.input(z2.object({ scope: z2.enum(["private", "family", "link"]) })).query(async ({ ctx, input }) => {
+      return await getLettersByScope(ctx.user.id, input.scope);
     }),
     cancel: protectedProcedure.input(z2.object({ id: z2.number() })).mutation(async ({ ctx, input }) => {
       const letter = await getLetterById(input.id);
@@ -1729,17 +2093,18 @@ var appRouter = router({
       const letter = await getLetterById(input.id);
       if (!letter) throw new Error("Letter not found");
       if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
-      const existingToken = await getActiveShareToken(input.id);
+      const existingToken = await getActiveShareToken2(input.id);
       if (existingToken) {
         return { shareToken: existingToken.token };
       }
       if (letter.shareToken) {
-        await migrateShareTokenIfNeeded(input.id, letter.shareToken);
+        await migrateShareTokenIfNeeded2(input.id, letter.shareToken);
         return { shareToken: letter.shareToken };
       }
       const shareToken = nanoid(21);
-      await createShareToken(input.id, shareToken);
+      await createShareToken2(input.id, shareToken);
       await updateLetterShareToken(input.id, shareToken);
+      await updateLetter(input.id, { visibilityScope: "link", familyId: null });
       return { shareToken };
     }),
     /**
@@ -1755,9 +2120,9 @@ var appRouter = router({
       if (!letter) throw new Error("Letter not found");
       if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
       if (letter.shareToken) {
-        await migrateShareTokenIfNeeded(input.letterId, letter.shareToken);
+        await migrateShareTokenIfNeeded2(input.letterId, letter.shareToken);
       }
-      const result = await revokeShareToken(input.letterId, input.reason);
+      const result = await revokeShareToken2(input.letterId, input.reason);
       return { success: result.success, wasActive: result.wasActive };
     }),
     /**
@@ -1770,10 +2135,10 @@ var appRouter = router({
       if (!letter) throw new Error("Letter not found");
       if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
       if (letter.shareToken) {
-        await migrateShareTokenIfNeeded(input.letterId, letter.shareToken);
+        await migrateShareTokenIfNeeded2(input.letterId, letter.shareToken);
       }
       const newToken = nanoid(21);
-      const result = await rotateShareToken(input.letterId, newToken);
+      const result = await rotateShareToken2(input.letterId, newToken);
       await updateLetterShareToken(input.letterId, newToken);
       return {
         success: result.success,
@@ -1807,9 +2172,9 @@ var appRouter = router({
       }
       if (newUnlockAt && input.reminderDaysBeforeList !== void 0) {
         if (input.reminderEnabled === false || input.reminderDaysBeforeList.length === 0) {
-          await deleteRemindersByLetterId(input.letterId);
+          await deleteRemindersByLetterId2(input.letterId);
         } else {
-          await updateLetterReminders(
+          await updateLetterReminders2(
             input.letterId,
             ctx.user.id,
             newUnlockAt,
@@ -1817,7 +2182,7 @@ var appRouter = router({
           );
         }
       }
-      const reminders = await getRemindersByLetterId(input.letterId);
+      const reminders = await getRemindersByLetterId2(input.letterId);
       const updatedLetter = await getLetterById(input.letterId);
       return {
         success: true,
@@ -1832,7 +2197,7 @@ var appRouter = router({
       const letter = await getLetterById(input.letterId);
       if (!letter) throw new Error("Letter not found");
       if (letter.authorId !== ctx.user.id) throw new Error("Unauthorized");
-      const activeToken = await getActiveShareToken(input.letterId);
+      const activeToken = await getActiveShareToken2(input.letterId);
       return {
         hasActiveLink: !!activeToken,
         shareToken: activeToken?.token || null,
@@ -1898,7 +2263,7 @@ var appRouter = router({
           description: "\u672A\u6765\u306E\u7279\u5225\u306A\u65E5\u306B\u5C4A\u304F\u624B\u7D19\u304C\u3042\u306A\u305F\u3092\u5F85\u3063\u3066\u3044\u307E\u3059\u3002"
         };
       }
-      const tokenRecord = await getShareTokenRecord(input.shareToken);
+      const tokenRecord = await getShareTokenRecord2(input.shareToken);
       if (tokenRecord) {
         if (tokenRecord.status === "revoked") {
           return {
@@ -1912,10 +2277,13 @@ var appRouter = router({
             message: "\u3053\u306E\u5171\u6709\u30EA\u30F3\u30AF\u306F\u65B0\u3057\u3044\u30EA\u30F3\u30AF\u306B\u7F6E\u304D\u63DB\u3048\u3089\u308C\u307E\u3057\u305F\u3002\u9001\u4FE1\u8005\u306B\u65B0\u3057\u3044\u30EA\u30F3\u30AF\u3092\u304A\u554F\u3044\u5408\u308F\u305B\u304F\u3060\u3055\u3044\u3002"
           };
         }
-        await incrementShareTokenViewCount(input.shareToken);
+        await incrementShareTokenViewCount2(input.shareToken);
       }
       const letter = await getLetterByShareToken(input.shareToken);
       if (!letter) {
+        return { error: "not_found" };
+      }
+      if (letter.visibilityScope !== "link") {
         return { error: "not_found" };
       }
       if (letter.status === "canceled") {
@@ -1961,6 +2329,15 @@ var appRouter = router({
         serverShare: shouldProvideServerShare ? letter.serverShare : null,
         // 封筒（解錠コードで暗号化されたclientShare）
         unlockEnvelope,
+        // 暗号化済み音声（開封日時後のみ提供）
+        encryptedAudio: letter.encryptedAudioUrl ? {
+          url: letter.encryptedAudioUrl,
+          iv: letter.encryptedAudioIv,
+          mimeType: letter.encryptedAudioMimeType,
+          byteSize: letter.encryptedAudioByteSize,
+          durationSec: letter.encryptedAudioDurationSec,
+          cryptoVersion: letter.encryptedAudioCryptoVersion
+        } : null,
         letter: {
           id: letter.id,
           recipientName: letter.recipientName,
@@ -2194,7 +2571,7 @@ var appRouter = router({
       if (!letter || letter.authorId !== ctx.user.id) {
         return { reminders: [], daysBeforeList: [] };
       }
-      const reminders = await getRemindersByLetterId(input.letterId);
+      const reminders = await getRemindersByLetterId2(input.letterId);
       const daysBeforeList = reminders.map((r) => r.daysBefore);
       return { reminders, daysBeforeList };
     }),
@@ -2215,16 +2592,16 @@ var appRouter = router({
         throw new Error("\u958B\u5C01\u65E5\u6642\u304C\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093");
       }
       if (!input.enabled || input.daysBeforeList.length === 0) {
-        await deleteRemindersByLetterId(input.letterId);
+        await deleteRemindersByLetterId2(input.letterId);
         return { success: true, reminders: [] };
       }
-      await updateLetterReminders(
+      await updateLetterReminders2(
         input.letterId,
         ctx.user.id,
         letter.unlockAt,
         input.daysBeforeList
       );
-      const reminders = await getRemindersByLetterId(input.letterId);
+      const reminders = await getRemindersByLetterId2(input.letterId);
       return { success: true, reminders };
     }),
     /**
@@ -2235,7 +2612,7 @@ var appRouter = router({
       if (!letter || letter.authorId !== ctx.user.id) {
         throw new Error("\u624B\u7D19\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093");
       }
-      await deleteRemindersByLetterId(input.letterId);
+      await deleteRemindersByLetterId2(input.letterId);
       return { success: true };
     })
   }),
@@ -2259,6 +2636,251 @@ var appRouter = router({
       const fileKey = `ciphertext/${ctx.user.id}/${nanoid()}.enc`;
       const { url } = await storagePut(fileKey, buffer, "application/octet-stream");
       return { url, key: fileKey };
+    }),
+    /**
+     * 暗号化済み音声アップロード（ゼロ知識設計）
+     * 
+     * - クライアント側で暗号化された音声をアップロード
+     * - サーバーは暗号文のみを保存（平文にアクセス不可）
+     */
+    uploadEncryptedAudio: protectedProcedure.input(z2.object({
+      encryptedAudioBase64: z2.string(),
+      // 暗号化済み音声のBase64
+      mimeType: z2.string(),
+      // 元の音声のMIMEタイプ
+      byteSize: z2.number()
+      // 暗号文サイズ
+    })).mutation(async ({ ctx, input }) => {
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (input.byteSize > MAX_SIZE) {
+        throw new Error(`\u97F3\u58F0\u30D5\u30A1\u30A4\u30EB\u304C\u5927\u304D\u3059\u304E\u307E\u3059\uFF08\u4E0A\u9650: ${MAX_SIZE / 1024 / 1024}MB\uFF09`);
+      }
+      const buffer = Buffer.from(input.encryptedAudioBase64, "base64");
+      const ext = input.mimeType.includes("webm") ? "webm" : input.mimeType.includes("mp4") ? "m4a" : "enc";
+      const fileKey = `encrypted-audio/${ctx.user.id}/${nanoid()}.${ext}.enc`;
+      const { url } = await storagePut(fileKey, buffer, "application/octet-stream");
+      return { url, key: fileKey };
+    })
+  }),
+  // ============================================
+  // AI Interview Router（自分史インタビュー）
+  // ============================================
+  interview: router({
+    /**
+     * セッション開始（または既存のactiveなセッションを返す）
+     */
+    create: protectedProcedure.input(z2.object({
+      recipientName: z2.string().optional(),
+      topic: z2.string().optional()
+    })).mutation(async ({ ctx, input }) => {
+      const activeSession = await getActiveInterviewSession(ctx.user.id);
+      if (activeSession) {
+        return { sessionId: activeSession.id, isNew: false };
+      }
+      const sessionId = await createInterviewSession(
+        ctx.user.id,
+        input.recipientName,
+        input.topic
+      );
+      const systemPrompt = `
+\u3042\u306A\u305F\u306F\u300C\u672A\u6765\u4FBF\u300D\u3068\u3044\u3046\u30B5\u30FC\u30D3\u30B9\u306EAI\u30A4\u30F3\u30BF\u30D3\u30E5\u30A2\u30FC\u3067\u3059\u3002
+\u30E6\u30FC\u30B6\u30FC\u306F\u300C\u81EA\u5206\u53F2\u624B\u7D19\u300D\u3084\u300C\u5927\u5207\u306A\u4EBA\u3078\u306E\u624B\u7D19\u300D\u3092\u66F8\u3053\u3046\u3068\u3057\u3066\u3044\u307E\u3059\u304C\u3001\u4F55\u3092\u66F8\u3051\u3070\u3044\u3044\u304B\u60A9\u3093\u3067\u3044\u307E\u3059\u3002
+\u3042\u306A\u305F\u306E\u5F79\u5272\u306F\u3001\u30E6\u30FC\u30B6\u30FC\u306B\u512A\u3057\u304F\u8CEA\u554F\u3092\u6295\u3052\u304B\u3051\u3001\u5FC3\u306E\u4E2D\u306B\u3042\u308B\u60F3\u3044\u3084\u30A8\u30D4\u30BD\u30FC\u30C9\u3092\u5F15\u304D\u51FA\u3059\u3053\u3068\u3067\u3059\u3002
+
+\u30EB\u30FC\u30EB:
+- \u76F8\u624B\u306F\u53CB\u9054\u611F\u899A\u3067\u8A71\u305B\u308B\u3088\u3046\u306B\u3001\u5C11\u3057\u7815\u3051\u305F\u4E01\u5BE7\u8A9E\uFF08\u3067\u3059\u30FB\u307E\u3059\u8ABF\u3060\u304C\u5805\u82E6\u3057\u304F\u306A\u3044\uFF09\u3067\u8A71\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u6700\u521D\u306E\u6328\u62F6\u3068\u3057\u3066\u3001\u30E6\u30FC\u30B6\u30FC\u304C\u30EA\u30E9\u30C3\u30AF\u30B9\u3067\u304D\u308B\u3088\u3046\u306B\u58F0\u3092\u304B\u3051\u3001\u8AB0\u306B\u3069\u3093\u306A\u624B\u7D19\u3092\u66F8\u304D\u305F\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u8CEA\u554F\u306F\u4E00\u5EA6\u306B1\u3064\u3060\u3051\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u76F8\u624B\u306E\u8A71\u3092\u5426\u5B9A\u305B\u305A\u3001\u5171\u611F\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+        `;
+      const messages = [{ role: "system", content: systemPrompt }];
+      let aiResponse = "";
+      try {
+        const result = await invokeLLM({ messages });
+        const content = result.choices[0]?.message?.content;
+        aiResponse = typeof content === "string" ? content : "\u3053\u3093\u306B\u3061\u306F\u3002";
+      } catch (e) {
+        aiResponse = "\u3053\u3093\u306B\u3061\u306F\u3002\u4ECA\u65E5\u306F\u3069\u306E\u3088\u3046\u306A\u624B\u7D19\u3092\u66F8\u304D\u305F\u3044\u3067\u3059\u304B\uFF1F\u4E00\u7DD2\u306B\u304A\u8A71\u3057\u3057\u306A\u304C\u3089\u898B\u3064\u3051\u3066\u3044\u304D\u307E\u3057\u3087\u3046\u3002";
+      }
+      await addInterviewMessage(sessionId, "ai", aiResponse);
+      return { sessionId, isNew: true, message: aiResponse };
+    }),
+    /**
+     * 履歴取得
+     */
+    getHistory: protectedProcedure.input(z2.object({ sessionId: z2.number() })).query(async ({ ctx, input }) => {
+      const session = await getInterviewSession(input.sessionId);
+      if (!session || session.userId !== ctx.user.id) {
+        throw new Error("Unauthorized");
+      }
+      return await getInterviewHistory(input.sessionId);
+    }),
+    /**
+     * メッセージ送信
+     */
+    sendMessage: protectedProcedure.input(z2.object({
+      sessionId: z2.number(),
+      message: z2.string()
+    })).mutation(async ({ ctx, input }) => {
+      const session = await getInterviewSession(input.sessionId);
+      if (!session || session.userId !== ctx.user.id) {
+        throw new Error("Unauthorized");
+      }
+      if (session.status === "completed") {
+        throw new Error("\u3053\u306E\u30BB\u30C3\u30B7\u30E7\u30F3\u306F\u7D42\u4E86\u3057\u3066\u3044\u307E\u3059");
+      }
+      await addInterviewMessage(input.sessionId, "user", input.message);
+      const history = await getInterviewHistory(input.sessionId);
+      const systemPrompt = `
+\u3042\u306A\u305F\u306F\u300C\u672A\u6765\u4FBF\u300D\u3068\u3044\u3046\u30B5\u30FC\u30D3\u30B9\u306EAI\u30A4\u30F3\u30BF\u30D3\u30E5\u30A2\u30FC\u3067\u3059\u3002
+\u30E6\u30FC\u30B6\u30FC\u306E\u30A8\u30D4\u30BD\u30FC\u30C9\u3092\u5F15\u304D\u51FA\u3057\u3001\u6700\u7D42\u7684\u306B\u611F\u52D5\u7684\u306A\u624B\u7D19\u304C\u66F8\u3051\u308B\u3088\u3046\u306B\u5C0E\u3044\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u73FE\u5728\u306E\u72B6\u6CC1:
+- \u5B9B\u5148: ${session.recipientName || "\u672A\u5B9A"}
+- \u30C8\u30D4\u30C3\u30AF: ${session.topic || "\u81EA\u5206\u53F2"}
+
+\u30EB\u30FC\u30EB:
+- \u77ED\u304F\u7C21\u6F54\u306B\u8FD4\u7B54\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u9577\u6587\u306F\u907F\u3051\u308B\uFF09\u3002
+- \u30E6\u30FC\u30B6\u30FC\u306E\u56DE\u7B54\u306B\u5BFE\u3057\u3066\u300C\u305D\u308C\u306F\u7D20\u6575\u3067\u3059\u306D\u300D\u300C\u5927\u5909\u3067\u3057\u305F\u306D\u300D\u306A\u3069\u5171\u611F\u30FB\u30EA\u30A2\u30AF\u30B7\u30E7\u30F3\u3092\u5165\u308C\u3066\u304B\u3089\u3001\u6B21\u306E\u8CEA\u554F\u3092\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u8CEA\u554F\u306F\u300C\u5177\u4F53\u7684\u306B\u300D\u300C\u305D\u306E\u6642\u3069\u3046\u611F\u3058\u305F\u304B\u300D\u306A\u3069\u6DF1\u6398\u308A\u3059\u308B\u3082\u306E\u304C\u826F\u3044\u3067\u3059\u3002
+- \u4E00\u5EA6\u306B\u8907\u6570\u306E\u8CEA\u554F\u3092\u305B\u305A\u30011\u3064\u305A\u3064\u805E\u3044\u3066\u304F\u3060\u3055\u3044\u3002
+- 5\u301C10\u5F80\u5FA9\u7A0B\u5EA6\u4F1A\u8A71\u304C\u9032\u3093\u3060\u3089\u3001\u300C\u305D\u308D\u305D\u308D\u624B\u7D19\u306E\u4E0B\u66F8\u304D\u3092\u66F8\u3044\u3066\u307F\u307E\u3057\u3087\u3046\u304B\uFF1F\u300D\u3068\u63D0\u6848\u3057\u3066\u3082\u826F\u3044\u3067\u3059\u3002
+        `;
+      const messages = [
+        { role: "system", content: systemPrompt },
+        ...history.map((msg) => ({
+          role: msg.sender === "ai" ? "assistant" : "user",
+          content: msg.content
+        }))
+      ];
+      let aiResponse = "";
+      try {
+        const result = await invokeLLM({ messages });
+        const content = result.choices[0]?.message?.content;
+        aiResponse = typeof content === "string" ? content : "";
+      } catch (e) {
+        console.error("LLM Error:", e);
+        aiResponse = "\u3059\u307F\u307E\u305B\u3093\u3001\u5C11\u3057\u8003\u3048\u4E8B\u3092\u3057\u3066\u3044\u307E\u3059\u3002\u3082\u3046\u4E00\u5EA6\u6559\u3048\u3066\u3044\u305F\u3060\u3051\u307E\u3059\u304B\uFF1F";
+      }
+      await addInterviewMessage(input.sessionId, "ai", aiResponse);
+      return { message: aiResponse };
+    }),
+    /**
+     * ドラフト生成
+     */
+    generateDraft: protectedProcedure.input(z2.object({ sessionId: z2.number() })).mutation(async ({ ctx, input }) => {
+      const session = await getInterviewSession(input.sessionId);
+      if (!session || session.userId !== ctx.user.id) {
+        throw new Error("Unauthorized");
+      }
+      const history = await getInterviewHistory(input.sessionId);
+      const prompt = `
+\u4EE5\u4E0B\u306E\u4F1A\u8A71\u30ED\u30B0\u3092\u5143\u306B\u3001${session.recipientName || "\u5927\u5207\u306A\u4EBA"}\u3078\u9001\u308B\u624B\u7D19\u306E\u4E0B\u66F8\u304D\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+[\u4F1A\u8A71\u30ED\u30B0]
+${history.map((m) => `${m.sender}: ${m.content}`).join("\n")}
+
+\u4F5C\u6210\u30EB\u30FC\u30EB:
+- \u611F\u52D5\u7684\u3067\u6E29\u304B\u3044\u30C8\u30FC\u30F3\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u4F1A\u8A71\u306E\u4E2D\u3067\u51FA\u3066\u304D\u305F\u5177\u4F53\u7684\u306A\u30A8\u30D4\u30BD\u30FC\u30C9\u3092\u76DB\u308A\u8FBC\u3093\u3067\u304F\u3060\u3055\u3044\u3002
+- \u69CB\u6210\u306F\u300C\u4EF6\u540D\u300D\u3068\u300C\u672C\u6587\u300D\u306B\u5206\u3051\u3066\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002JSON\u5F62\u5F0F\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+\u4F8B: {"title": "\u4EF6\u540D...", "body": "\u672C\u6587..."}
+JSON\u4EE5\u5916\u306E\u4F59\u8A08\u306A\u6587\u5B57\u306F\u542B\u3081\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002
+        `;
+      const messages = [{ role: "user", content: prompt }];
+      let draftTitle = "AI\u5BFE\u8A71\u304B\u3089\u306E\u4E0B\u66F8\u304D";
+      let draftBody = "";
+      try {
+        const result = await invokeLLM({ messages });
+        const content = result.choices[0]?.message?.content;
+        const resultText = typeof content === "string" ? content : "";
+        const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const json = JSON.parse(jsonMatch[0]);
+          draftTitle = json.title || draftTitle;
+          draftBody = json.body || resultText;
+        } else {
+          draftBody = resultText;
+        }
+      } catch (e) {
+        console.error("Draft Generation Error:", e);
+        draftBody = "\u4E0B\u66F8\u304D\u306E\u751F\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u4F1A\u8A71\u5C65\u6B74\u304B\u3089\u81EA\u5206\u3067\u66F8\u3044\u3066\u307F\u307E\u3057\u3087\u3046\uFF01";
+      }
+      await completeInterviewSession(input.sessionId);
+      const draftId = await createDraft({
+        userId: ctx.user.id,
+        recipientName: session.recipientName,
+        aiDraft: draftBody
+      });
+      return { draftId, content: draftBody, title: draftTitle };
+    })
+  }),
+  family: router({
+    /**
+     * 自分が所属する家族グループを取得
+     */
+    getMyFamily: protectedProcedure.query(async ({ ctx }) => {
+      return await getFamilyMemberships(ctx.user.id);
+    }),
+    /**
+     * 家族グループを作成（まだ持っていない場合）
+     */
+    create: protectedProcedure.input(z2.object({ name: z2.string().optional() })).mutation(async ({ ctx, input }) => {
+      const existing = await getFamilyByOwner(ctx.user.id);
+      if (existing) {
+        return { id: existing.id, alreadyExists: true };
+      }
+      const familyId = await createFamily(ctx.user.id, input.name);
+      return { id: familyId, alreadyExists: false };
+    }),
+    /**
+     * 招待を作成（メールアドレス指定）
+     * ※ メール送信は次フェーズ。まずはtoken表示で対応
+     */
+    inviteByEmail: protectedProcedure.input(z2.object({
+      familyId: z2.number(),
+      email: z2.string().email()
+    })).mutation(async ({ ctx, input }) => {
+      const family = await getFamilyByOwner(ctx.user.id);
+      if (!family || family.id !== input.familyId) {
+        throw new Error("\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093");
+      }
+      const token = nanoid(21);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+      await createFamilyInvite(input.familyId, input.email, token, expiresAt);
+      return {
+        token,
+        inviteUrl: `/family/invite/${token}`,
+        expiresAt: expiresAt.toISOString()
+      };
+    }),
+    /**
+     * 招待を受諾
+     */
+    acceptInvite: protectedProcedure.input(z2.object({ token: z2.string() })).mutation(async ({ ctx, input }) => {
+      return await acceptFamilyInvite(input.token, ctx.user.id);
+    }),
+    /**
+     * 家族メンバー一覧を取得
+     */
+    listMembers: protectedProcedure.input(z2.object({ familyId: z2.number() })).query(async ({ ctx, input }) => {
+      const isMember = await isUserFamilyMember(ctx.user.id, input.familyId);
+      if (!isMember) {
+        return { members: [], error: "\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093" };
+      }
+      const members = await getFamilyMembers(input.familyId);
+      return { members };
+    }),
+    /**
+     * 招待一覧を取得（オーナーのみ）
+     */
+    listInvites: protectedProcedure.input(z2.object({ familyId: z2.number() })).query(async ({ ctx, input }) => {
+      const family = await getFamilyByOwner(ctx.user.id);
+      if (!family || family.id !== input.familyId) {
+        return { invites: [], error: "\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093" };
+      }
+      const invites = await getFamilyInvites(input.familyId);
+      return { invites };
     })
   })
 });
@@ -2368,85 +2990,12 @@ async function createContext(opts) {
   };
 }
 
-// server/_core/vite.ts
+// server/_core/static.ts
 import express from "express";
 import fs from "fs";
-import { nanoid as nanoid2 } from "nanoid";
-import path2 from "path";
-import { createServer as createViteServer } from "vite";
-
-// vite.config.ts
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vite";
-var plugins = [react(), tailwindcss()];
-var vite_config_default = defineConfig({
-  plugins,
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets")
-    }
-  },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
-  build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true
-  },
-  server: {
-    host: true,
-    proxy: {
-      // Proxy API requests to the Express server in development
-      "/api": {
-        target: "http://localhost:3000",
-        changeOrigin: true
-      }
-    }
-  }
-});
-
-// server/_core/vite.ts
-async function setupVite(app2, server) {
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true
-  };
-  const vite = await createViteServer({
-    ...vite_config_default,
-    configFile: false,
-    server: serverOptions,
-    appType: "custom"
-  });
-  app2.use(vite.middlewares);
-  app2.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-    try {
-      const clientTemplate = path2.resolve(
-        import.meta.dirname,
-        "../..",
-        "client",
-        "index.html"
-      );
-      let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid2()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
-    } catch (e) {
-      vite.ssrFixStacktrace(e);
-      next(e);
-    }
-  });
-}
 function serveStatic(app2) {
-  const distPath = process.env.NODE_ENV === "development" ? path2.resolve(import.meta.dirname, "../..", "dist", "public") : path2.resolve(import.meta.dirname, "public");
+  const distPath = process.env.NODE_ENV === "development" ? path.resolve(import.meta.dirname, "../..", "dist", "public") : path.resolve(import.meta.dirname, "public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -2454,7 +3003,7 @@ function serveStatic(app2) {
   }
   app2.use(express.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
+    res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
 
@@ -2616,20 +3165,20 @@ async function runReminderBatch() {
     errors: []
   };
   console.log("[ReminderBatch] Starting batch processing...");
-  const reminders = await getPendingReminders(100);
+  const reminders = await getPendingReminders2(100);
   console.log(`[ReminderBatch] Found ${reminders.length} pending reminders`);
   for (const reminder of reminders) {
     result.processed++;
     if (!reminder.letter) {
       console.warn(`[ReminderBatch] Letter not found for reminder ${reminder.id}`);
-      await markReminderAsFailed(reminder.id, "Letter not found");
+      await markReminderAsFailed2(reminder.id, "Letter not found");
       result.failed++;
       result.errors.push({ reminderId: reminder.id, error: "Letter not found" });
       continue;
     }
     if (!reminder.user) {
       console.warn(`[ReminderBatch] User not found for reminder ${reminder.id}`);
-      await markReminderAsFailed(reminder.id, "User not found");
+      await markReminderAsFailed2(reminder.id, "User not found");
       result.failed++;
       result.errors.push({ reminderId: reminder.id, error: "User not found" });
       continue;
@@ -2637,14 +3186,14 @@ async function runReminderBatch() {
     const email = reminder.user.notificationEmail || reminder.user.email;
     if (!email) {
       console.warn(`[ReminderBatch] No email for reminder ${reminder.id}`);
-      await markReminderAsFailed(reminder.id, "No email address");
+      await markReminderAsFailed2(reminder.id, "No email address");
       result.failed++;
       result.errors.push({ reminderId: reminder.id, error: "No email address" });
       continue;
     }
     if (!reminder.letter.unlockAt) {
       console.warn(`[ReminderBatch] No unlock date for reminder ${reminder.id}`);
-      await markReminderAsFailed(reminder.id, "No unlock date");
+      await markReminderAsFailed2(reminder.id, "No unlock date");
       result.failed++;
       result.errors.push({ reminderId: reminder.id, error: "No unlock date" });
       continue;
@@ -2661,7 +3210,7 @@ async function runReminderBatch() {
     };
     const sent = await sendReminderEmail(emailParams);
     if (sent) {
-      const marked = await markReminderAsSent(reminder.id);
+      const marked = await markReminderAsSent2(reminder.id);
       if (marked) {
         console.log(`[ReminderBatch] Sent reminder ${reminder.id} to ${email}`);
         result.sent++;
@@ -2670,7 +3219,7 @@ async function runReminderBatch() {
         result.skipped++;
       }
     } else {
-      await markReminderAsFailed(reminder.id, "Email send failed");
+      await markReminderAsFailed2(reminder.id, "Email send failed");
       result.failed++;
       result.errors.push({ reminderId: reminder.id, error: "Email send failed" });
     }
@@ -2731,7 +3280,8 @@ async function findAvailablePort(startPort = 3e3) {
 async function startServer() {
   const server = createServer(app);
   if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
+    const { setupVite: setupVite2 } = await Promise.resolve().then(() => (init_vite(), vite_exports));
+    await setupVite2(app, server);
   } else {
     serveStatic(app);
   }
