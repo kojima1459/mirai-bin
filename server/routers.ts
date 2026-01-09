@@ -3,8 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { users } from "../drizzle/schema";
+import { eq, isNull, and } from "drizzle-orm";
 import {
   createLetter,
   getLetterById,
@@ -55,8 +54,9 @@ import {
   addInterviewMessage,
   getInterviewHistory,
   completeInterviewSession,
-  updateUserNotificationSettings, // Added this function
+  updateUserNotificationSettings,
 } from "./db";
+import { pushSubscriptions, users } from "../drizzle/schema";
 import { invokeLLM, Role } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
@@ -71,6 +71,16 @@ import {
   createReminderNotification,
 } from "./db_notification";
 import { getDb } from "./db";
+import { sendEmail } from "./_core/email/sendEmail";
+import {
+  buildVerificationEmailSubject,
+  buildVerificationEmailHtml,
+  buildVerificationEmailText,
+  buildOpenNotificationSubject,
+  buildOpenNotificationHtml,
+  buildOpenNotificationText,
+} from "./_core/email/emailTemplates";
+import { ENV } from "./_core/env";
 
 export const appRouter = router({
   system: systemRouter,
@@ -115,9 +125,25 @@ export const appRouter = router({
             notificationEmailVerifyExpiresAt: expiresAt,
           }).where(eq(users.id, ctx.user.id));
 
-          // TODO: Send verification email with token
-          // For now, auto-verify in development
-          console.log(`[Email Verification] Token for user ${ctx.user.id}: ${verifyToken}`);
+          // Send verification email
+          try {
+            const subject = buildVerificationEmailSubject();
+            const html = buildVerificationEmailHtml({ token: verifyToken, email: input.notificationEmail });
+            const text = buildVerificationEmailText({ token: verifyToken, email: input.notificationEmail });
+
+            await sendEmail({
+              to: input.notificationEmail,
+              subject,
+              text,
+              html,
+              category: "email_verification",
+              meta: { userId: ctx.user.id },
+            });
+            console.log(`[Email Verification] Sent to ${input.notificationEmail}`);
+          } catch (emailErr) {
+            // Email send failure should not block the operation
+            console.warn(`[Email Verification] Failed to send:`, emailErr);
+          }
 
           return { success: true, requiresVerification: true };
         } else {
@@ -233,6 +259,110 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         await updateUserEmail(ctx.user.id, input.newEmail);
+        return { success: true };
+      }),
+
+    // ============================================
+    // Push Notification Subscription Management
+    // ============================================
+
+    /**
+     * Get VAPID public key for client subscription
+     */
+    getVapidPublicKey: publicProcedure.query(() => {
+      return { publicKey: ENV.vapidPublicKey || null };
+    }),
+
+    /**
+     * Get push subscription status for current user
+     */
+    getPushStatus: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { subscriptions: [], isConfigured: false };
+
+      const subs = await db.select({
+        id: pushSubscriptions.id,
+        endpoint: pushSubscriptions.endpoint,
+        createdAt: pushSubscriptions.createdAt,
+        revokedAt: pushSubscriptions.revokedAt,
+      })
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.userId, ctx.user.id));
+
+      return {
+        subscriptions: subs.filter(s => !s.revokedAt),
+        isConfigured: !!ENV.vapidPublicKey,
+      };
+    }),
+
+    /**
+     * Register push subscription
+     */
+    registerPushSubscription: protectedProcedure
+      .input(z.object({
+        endpoint: z.string().url(),
+        p256dh: z.string(),
+        auth: z.string(),
+        userAgent: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        // Check if subscription already exists
+        const existing = await db.select()
+          .from(pushSubscriptions)
+          .where(eq(pushSubscriptions.endpoint, input.endpoint))
+          .limit(1);
+
+        if (existing.length > 0) {
+          // Reactivate if revoked, update if different user
+          await db.update(pushSubscriptions)
+            .set({
+              userId: ctx.user.id,
+              p256dh: input.p256dh,
+              auth: input.auth,
+              userAgent: input.userAgent || null,
+              revokedAt: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(pushSubscriptions.endpoint, input.endpoint));
+          return { success: true, action: "updated" };
+        }
+
+        // Insert new subscription
+        await db.insert(pushSubscriptions).values({
+          userId: ctx.user.id,
+          endpoint: input.endpoint,
+          p256dh: input.p256dh,
+          auth: input.auth,
+          userAgent: input.userAgent || null,
+        });
+
+        return { success: true, action: "created" };
+      }),
+
+    /**
+     * Unregister push subscription
+     */
+    unregisterPushSubscription: protectedProcedure
+      .input(z.object({
+        endpoint: z.string().url(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        // Mark as revoked (don't delete for audit)
+        await db.update(pushSubscriptions)
+          .set({ revokedAt: new Date() })
+          .where(
+            and(
+              eq(pushSubscriptions.userId, ctx.user.id),
+              eq(pushSubscriptions.endpoint, input.endpoint)
+            )
+          );
+
         return { success: true };
       }),
   }),
@@ -772,6 +902,7 @@ export const appRouter = router({
 
         // 初回開封時にオーナーに通知
         if (isFirstOpen) {
+          // 1) Manus owner notification (existing)
           try {
             const { notifyOwner } = await import("./_core/notification");
             const unlockTimeStr = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
@@ -780,8 +911,54 @@ export const appRouter = router({
               content: `あなたの手紙が開封されました。\n\n宛先: ${letter.recipientName || "未設定"} \n開封日時: ${unlockTimeStr} \n\n※ 本文はゼロ知識設計のため、運営者も読めません。`,
             });
           } catch (err) {
-            // 通知失敗はログのみ（開封処理は成功させる）
-            console.warn("[markOpened] Failed to notify owner:", err);
+            console.warn("[markOpened] Failed to notify owner (Manus):", err);
+          }
+
+          // 2) Email notification to owner (if verified email exists)
+          try {
+            const db = await getDb();
+            if (db) {
+              const ownerResult = await db.select({
+                email: users.email,
+                notificationEmail: users.notificationEmail,
+                notificationEmailVerified: users.notificationEmailVerified,
+              }).from(users).where(eq(users.id, letter.authorId)).limit(1);
+
+              const owner = ownerResult[0];
+              if (owner) {
+                const ownerEmail = owner.notificationEmail || owner.email;
+                const isVerified = owner.notificationEmailVerified || !owner.notificationEmail;
+
+                if (ownerEmail && isVerified) {
+                  const recipientLabel = letter.recipientName || "大切な人";
+                  const letterManagementUrl = `${ENV.appBaseUrl}/letters/${letter.id}`;
+
+                  const subject = buildOpenNotificationSubject();
+                  const html = buildOpenNotificationHtml({
+                    recipientLabel,
+                    openedAt: new Date(),
+                    letterManagementUrl,
+                  });
+                  const text = buildOpenNotificationText({
+                    recipientLabel,
+                    openedAt: new Date(),
+                    letterManagementUrl,
+                  });
+
+                  await sendEmail({
+                    to: ownerEmail,
+                    subject,
+                    text,
+                    html,
+                    category: "letter_opened",
+                    meta: { letterId: letter.id },
+                  });
+                  console.log(`[markOpened] Open notification email sent to ${ownerEmail}`);
+                }
+              }
+            }
+          } catch (emailErr) {
+            console.warn("[markOpened] Failed to send open notification email:", emailErr);
           }
         }
 
@@ -1465,6 +1642,36 @@ JSON以外の余計な文字は含めないでください。
         if (!db) return { success: false };
         await markNotificationAsRead(db, ctx.user.id, input.notificationId);
         return { success: true };
+      }),
+  }),
+
+  // ============================================
+  // Admin Router (Owner-only operations)
+  // ============================================
+  admin: router({
+    /**
+     * Manual cleanup of old read notifications
+     * Only accessible by app owner (OWNER_OPEN_ID)
+     */
+    cleanupNotifications: protectedProcedure
+      .input(z.object({
+        days: z.number().min(1).max(365).default(90),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Check if user is the owner
+        if (ctx.user.openId !== ENV.ownerOpenId) {
+          return { success: false, error: "unauthorized", deleted: 0 };
+        }
+
+        try {
+          const { cleanupNotifications } = await import("./_core/jobs/cleanupNotifications");
+          const result = await cleanupNotifications(input.days);
+          return { success: true, ...result };
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error("[Admin] Cleanup failed:", errorMsg);
+          return { success: false, error: errorMsg, deleted: 0 };
+        }
       }),
   }),
 });

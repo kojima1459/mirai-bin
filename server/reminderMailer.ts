@@ -6,7 +6,7 @@
  * - 通知の目的は「思い出させる」＋「PDF/保管場所を探させる」
  */
 
-import { ENV } from "./_core/env";
+import { sendEmail } from "./_core/email/sendEmail";
 
 export interface ReminderEmailParams {
   to: string;
@@ -32,7 +32,7 @@ export function buildReminderSubject(daysBefore: number): string {
  */
 export function buildReminderBodyHtml(params: ReminderEmailParams): string {
   const { recipientName, unlockAt, daysBefore, letterManagementUrl } = params;
-  
+
   const unlockDateStr = unlockAt.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
@@ -104,7 +104,7 @@ export function buildReminderBodyHtml(params: ReminderEmailParams): string {
  */
 export function buildReminderBodyText(params: ReminderEmailParams): string {
   const { recipientName, unlockAt, daysBefore, letterManagementUrl } = params;
-  
+
   const unlockDateStr = unlockAt.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
@@ -141,57 +141,35 @@ ${letterManagementUrl}
 /**
  * リマインダーメールを送信
  * 
- * Manus Notification APIを使用してメールを送信
- * （将来的にはSendGrid等に置き換え可能）
+ * sendEmailアダプタを使用（mock/sendgrid切り替え可能）
  */
 export async function sendReminderEmail(params: ReminderEmailParams): Promise<boolean> {
   const { to } = params;
-  
+
   const subject = buildReminderSubject(params.daysBefore);
-  const htmlBody = buildReminderBodyHtml(params);
-  const textBody = buildReminderBodyText(params);
-
-  // Manus Notification APIを使用
-  // 現在はオーナー通知のみ対応のため、オーナーへの通知として送信
-  // TODO: 将来的にはSendGrid等のメールサービスに置き換え
-  
-  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-    console.warn("[ReminderMailer] Notification service not configured");
-    return false;
-  }
-
-  const endpoint = new URL(
-    "webdevtoken.v1.WebDevService/SendNotification",
-    ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`
-  ).toString();
+  const html = buildReminderBodyHtml(params);
+  const text = buildReminderBodyText(params);
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "content-type": "application/json",
-        "connect-protocol-version": "1",
+    const result = await sendEmail({
+      to,
+      subject,
+      text,
+      html,
+      category: "reminder",
+      meta: {
+        letterId: params.letterId,
+        daysBefore: params.daysBefore,
       },
-      body: JSON.stringify({
-        title: subject,
-        content: textBody,
-      }),
     });
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.warn(
-        `[ReminderMailer] Failed to send reminder (${response.status} ${response.statusText})${
-          detail ? `: ${detail}` : ""
-        }`
-      );
+    if (result.success) {
+      console.log(`[ReminderMailer] Reminder sent to ${to}: ${subject}`);
+      return true;
+    } else {
+      console.warn(`[ReminderMailer] Failed to send reminder: ${result.error}`);
       return false;
     }
-
-    console.log(`[ReminderMailer] Reminder sent to ${to}: ${subject}`);
-    return true;
   } catch (error) {
     console.warn("[ReminderMailer] Error sending reminder:", error);
     return false;

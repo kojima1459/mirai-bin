@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users, Shield, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users, Shield, Clock, AlertCircle, CheckCircle2, Smartphone, Info } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -335,6 +336,9 @@ export default function Settings() {
               </Button>
             </div>
 
+            {/* プッシュ通知 */}
+            <PushNotificationSection />
+
             {/* 信頼できる通知先 */}
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-6">
               <div className="flex items-center gap-3 mb-2">
@@ -480,6 +484,125 @@ export default function Settings() {
             </div>
           </section>        </motion.div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Push notification section component
+ */
+function PushNotificationSection() {
+  const push = usePushNotifications();
+
+  const handleToggle = async () => {
+    const success = await push.toggle();
+    if (success) {
+      if (push.isSubscribed) {
+        toast.success("プッシュ通知を無効にしました");
+      } else {
+        toast.success("プッシュ通知を有効にしました");
+      }
+    } else if (push.error) {
+      toast.error("設定に失敗しました", { description: push.error });
+    }
+  };
+
+  // Not supported at all
+  if (!push.isSupported) {
+    return (
+      <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Smartphone className="h-5 w-5 text-white/40" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-white/50">プッシュ通知</h2>
+            <p className="text-xs text-white/30">このブラウザはプッシュ通知に対応していません</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // iOS but not installed as PWA
+  if (push.needsPWAInstall) {
+    return (
+      <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <Smartphone className="h-5 w-5 text-amber-400" />
+          </div>
+          <div>
+            <h2 className="font-semibold">プッシュ通知</h2>
+            <p className="text-xs text-white/40">ホーム画面への追加が必要です</p>
+          </div>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+          <p className="text-sm text-amber-200 flex items-start gap-2">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              iOSでプッシュ通知を受け取るには、このアプリをホーム画面に追加してください。
+              <br />
+              <strong>Safari → 共有ボタン → ホーム画面に追加</strong>
+            </span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Server not configured
+  if (!push.isConfigured) {
+    return (
+      <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Smartphone className="h-5 w-5 text-white/40" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-white/50">プッシュ通知</h2>
+            <p className="text-xs text-white/30">現在準備中です</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+          <Smartphone className="h-5 w-5 text-white/60" />
+        </div>
+        <div className="flex-1">
+          <h2 className="font-semibold">プッシュ通知</h2>
+          <p className="text-xs text-white/40">リマインドなどをプッシュ通知で受け取る</p>
+        </div>
+        <Switch
+          checked={push.isSubscribed}
+          onCheckedChange={handleToggle}
+          disabled={push.isLoading}
+        />
+      </div>
+
+      {push.permission === "denied" && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+          <p className="text-sm text-red-200">
+            通知がブロックされています。ブラウザの設定から通知を許可してください。
+          </p>
+        </div>
+      )}
+
+      {push.isSubscribed && (
+        <p className="text-xs text-green-400 flex items-center gap-1">
+          <CheckCircle2 className="h-3 w-3" />
+          プッシュ通知が有効です
+        </p>
+      )}
+
+      <p className="text-xs text-white/30">
+        メール通知と併用できます。端末がオフラインの場合はメールで通知されます。
+      </p>
     </div>
   );
 }

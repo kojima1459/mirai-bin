@@ -25,6 +25,7 @@ import { LetterCompletionView } from "@/components/LetterCompletionView";
 import { TemplateSelectStep } from "@/components/create-letter/TemplateSelectStep";
 import { RecordingStep } from "@/components/create-letter/RecordingStep";
 import { ReviewStep } from "@/components/create-letter/ReviewStep";
+import { TranscriptEditStep } from "@/components/create-letter/TranscriptEditStep";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -45,7 +46,7 @@ export default function CreateLetter() {
   const [, navigate] = useLocation();
   const { user, loading: authLoading } = useAuth();
 
-  const [step, setStep] = useState<"template" | "recording" | "transcribing" | "generating" | "editing" | "encrypting" | "complete">("template");
+  const [step, setStep] = useState<"template" | "recording" | "transcribing" | "transcript-edit" | "generating" | "editing" | "encrypting" | "complete">("template");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
   const [isRawMode, setIsRawMode] = useState(false);
@@ -152,22 +153,37 @@ export default function CreateLetter() {
         return;
       }
 
-      setStep("generating");
+      // 文字起こし編集ステップへ（AI生成前）
+      setStep("transcript-edit");
+    } catch (err) {
+      console.error("Error:", err);
+      toast.error("処理中にエラーが発生しました");
+      setStep("recording");
+    }
+  };
 
-      // AI下書き生成
+  // 編集済み文字起こしからAI手紙を生成
+  const handleGenerateFromTranscript = async () => {
+    if (!transcription.trim()) {
+      toast.error("文字起こしが空です");
+      return;
+    }
+
+    setStep("generating");
+
+    try {
       const draftResult = await generateDraftMutation.mutateAsync({
-        transcription: transcribeResult.text,
+        transcription: transcription,
         templateName: selectedTemplate === "__free__" ? "" : selectedTemplate,
         recipientName: recipientName || undefined,
       });
       setAiDraft(draftResult.draft);
       setFinalContent(draftResult.draft);
-
       setStep("editing");
     } catch (err) {
-      console.error("Error:", err);
-      toast.error("処理中にエラーが発生しました");
-      setStep("recording");
+      console.error("Error generating draft:", err);
+      toast.error("手紙の生成に失敗しました");
+      setStep("transcript-edit");
     }
   };
 
@@ -543,6 +559,20 @@ export default function CreateLetter() {
             <h3 className="text-lg font-bold text-white mb-2">音声を文字に変換中...</h3>
             <p className="text-sm text-white/40">しばらくお待ちください</p>
           </div>
+        )}
+
+        {/* 文字起こし編集 */}
+        {step === "transcript-edit" && (
+          <TranscriptEditStep
+            transcript={transcription}
+            onTranscriptChange={setTranscription}
+            onProceed={handleGenerateFromTranscript}
+            onBack={() => {
+              resetRecording();
+              setStep("recording");
+            }}
+            isRegenerating={generateDraftMutation.isPending}
+          />
         )}
 
         {/* AI生成中 */}

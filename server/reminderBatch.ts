@@ -108,8 +108,8 @@ export async function runReminderBatch(): Promise<BatchResult> {
     }
 
     // 管理画面URLを生成
-    // TODO: 実際のドメインに置き換え
-    const baseUrl = ENV.oAuthServerUrl?.replace("/api", "") || "https://mirai-bin.manus.space";
+    const { getAppBaseUrl } = await import("./_core/url");
+    const baseUrl = getAppBaseUrl();
     const letterManagementUrl = `${baseUrl}/letters/${reminder.letterId}`;
 
     // メール送信パラメータを構築

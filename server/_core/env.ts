@@ -8,6 +8,15 @@ export const ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "AIzaSyBhm0YrR2ju8PMHKkU2F5_oSaSCoPPo8Qo",
+  // Email configuration
+  sendgridApiKey: process.env.SENDGRID_API_KEY ?? "",
+  mailFrom: process.env.MAIL_FROM ?? "noreply@miraibin.web.app",
+  mailProvider: (process.env.MAIL_PROVIDER ?? "mock") as "mock" | "sendgrid",
+  appBaseUrl: process.env.APP_BASE_URL ?? "https://miraibin.web.app",
+  // Push notification (VAPID)
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  pushSubject: process.env.PUSH_SUBJECT ?? "mailto:noreply@miraibin.web.app",
 };
 
 if (ENV.isProduction) {
