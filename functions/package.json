@@ -11,6 +11,7 @@
   "main": "lib/index.js",
   "type": "module",
   "dependencies": {
+    "@google-cloud/functions-framework": "^3.5.0",
     "@aws-sdk/client-s3": "^3.693.0",
     "@aws-sdk/s3-request-presigner": "^3.693.0",
     "@trpc/server": "^11.6.0",
