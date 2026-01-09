@@ -1712,54 +1712,30 @@ function getLanguageName(langCode) {
 }
 
 // server/storage.ts
-init_env();
-function getStorageConfig() {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
-  if (!baseUrl || !apiKey) {
-    throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
-  }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
-}
-function buildUploadUrl(baseUrl, relKey) {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-function ensureTrailingSlash(value) {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-function normalizeKey(relKey) {
-  return relKey.replace(/^\/+/, "");
-}
-function toFormData(data, contentType, fileName) {
-  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
-  const form = new FormData();
-  form.append("file", blob, fileName || "file");
-  return form;
-}
-function buildAuthHeaders(apiKey) {
-  return { Authorization: `Bearer ${apiKey}` };
-}
-async function storagePut(relKey, data, contentType = "application/octet-stream") {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: buildAuthHeaders(apiKey),
-    body: formData
+import admin from "firebase-admin";
+var firebaseApp;
+try {
+  firebaseApp = admin.app();
+} catch {
+  firebaseApp = admin.initializeApp({
+    projectId: "miraibin",
+    storageBucket: "miraibin.firebasestorage.app"
   });
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
-    );
-  }
-  const url = (await response.json()).url;
+}
+var bucket = admin.storage(firebaseApp).bucket("miraibin.firebasestorage.app");
+async function storagePut(relKey, data, contentType = "application/octet-stream") {
+  const key = relKey.replace(/^\/+/, "");
+  const file = bucket.file(key);
+  const buffer = typeof data === "string" ? Buffer.from(data, "utf-8") : Buffer.from(data);
+  await file.save(buffer, {
+    metadata: {
+      contentType
+    },
+    resumable: false
+    // Simpler for smaller files
+  });
+  await file.makePublic();
+  const url = `https://storage.googleapis.com/${bucket.name}/${key}`;
   return { key, url };
 }
 
@@ -2863,16 +2839,16 @@ var HttpError = class extends Error {
 var ForbiddenError = (msg) => new HttpError(403, msg);
 
 // server/_core/firebaseAdmin.ts
-import admin from "firebase-admin";
-var firebaseApp;
+import admin2 from "firebase-admin";
+var firebaseApp2;
 try {
-  firebaseApp = admin.app();
+  firebaseApp2 = admin2.app();
 } catch {
-  firebaseApp = admin.initializeApp({
+  firebaseApp2 = admin2.initializeApp({
     projectId: "miraibin"
   });
 }
-var firebaseAuth = admin.auth(firebaseApp);
+var firebaseAuth = admin2.auth(firebaseApp2);
 async function verifyIdToken(authHeader) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return null;

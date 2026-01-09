@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ export function InviteFamilyDialog({ trigger, familyId: propFamilyId, onSuccess 
     const [, navigate] = useLocation();
     const searchString = useSearch();
     const [open, setOpen] = useState(false);
+    const { user } = useAuth();
     const [email, setEmail] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [step, setStep] = useState<"input" | "success">("input");
@@ -46,8 +48,8 @@ export function InviteFamilyDialog({ trigger, familyId: propFamilyId, onSuccess 
     });
 
     const activeFamily = familyMemberships?.[0];
-    const targetFamilyId = propFamilyId ?? activeFamily?.familyId;
-    const isOwner = activeFamily?.role === "owner";
+    const targetFamilyId = propFamilyId ?? activeFamily?.id;
+    const isOwner = activeFamily?.ownerUserId === user?.id;
 
     const inviteMutation = trpc.family.inviteByEmail.useMutation({
         onSuccess: (data) => {
@@ -198,7 +200,7 @@ export function InviteFamilyDialog({ trigger, familyId: propFamilyId, onSuccess 
                             {!isOwner && activeFamily && !isDebugMode && (
                                 <Alert className="bg-amber-50 text-amber-800 border-amber-200">
                                     <AlertDescription className="text-xs">
-                                        ※ 現在はオーナー権限を持つメンバー（{activeFamily.familyName}の作成者）のみが招待できます。
+                                        ※ 現在はオーナー権限を持つメンバー（{activeFamily.name}の作成者）のみが招待できます。
                                     </AlertDescription>
                                 </Alert>
                             )}

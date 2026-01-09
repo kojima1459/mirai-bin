@@ -7,7 +7,7 @@ import {
     KeyRound,
     AlertCircle,
     MailOpen,
-    LinkOff,
+    Link2Off,
     WifiOff,
     Home,
     RefreshCw,
@@ -121,7 +121,7 @@ export function ShareLetterErrorDisplay({
                 <CardContent className="py-12">
                     <div className="text-center space-y-4">
                         <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-                            <LinkOff className="h-8 w-8 text-muted-foreground" />
+                            <Link2Off className="h-8 w-8 text-muted-foreground" />
                         </div>
                         <h2 className="text-xl font-bold">リンクが無効です</h2>
                         <p className="text-muted-foreground">

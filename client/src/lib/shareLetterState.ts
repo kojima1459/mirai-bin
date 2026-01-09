@@ -13,7 +13,7 @@ export type ShareLetterState =
     | "NETWORK_OR_UNKNOWN";
 
 export interface ShareLetterData {
-    error?: "not_found" | "canceled" | "revoked" | "rotated";
+    error?: string;
     message?: string;
     canUnlock?: boolean;
     letter?: {

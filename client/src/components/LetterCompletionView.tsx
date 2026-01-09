@@ -1,21 +1,20 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
     Check,
     FileText,
     Share2,
-    Lock,
     Copy,
     MessageCircle,
     Mail,
-    ExternalLink,
     AlertTriangle,
     Loader2,
     Sparkles,
-    ArrowRight
+    ArrowRight,
+    Home,
+    PenTool
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -55,7 +54,6 @@ export function LetterCompletionView({
     const handleCopyUnlockCode = async () => {
         await navigator.clipboard.writeText(unlockCode);
         toast.success("解錠コードをコピーしました");
-        // 30秒後にクリップボードをクリア
         setTimeout(() => navigator.clipboard.writeText("").catch(() => { }), 30000);
     };
 
@@ -66,56 +64,61 @@ export function LetterCompletionView({
     };
 
     return (
-        <Card className="border-0 md:border shadow-none md:shadow-sm overflow-hidden">
+        <div className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-700">
             {/* Hero Header */}
-            <CardHeader className="text-center py-8 bg-gradient-to-b from-primary/5 to-transparent">
-                <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4 animate-in zoom-in-75 duration-500">
+            <div className="text-center py-8 bg-gradient-to-b from-white/5 to-transparent border-b border-white/5">
+                <div className="w-16 h-16 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4 animate-in zoom-in-75 duration-500">
                     <Sparkles className="h-8 w-8" />
                 </div>
-                <CardTitle className="text-2xl font-bold">封緘完了</CardTitle>
-                <p className="text-muted-foreground mt-2">
+                <h2 className="text-2xl font-bold text-white tracking-tight">封緘完了</h2>
+                <p className="text-white/50 mt-2 text-sm">
                     手紙は安全に暗号化されました
                 </p>
-            </CardHeader>
+            </div>
 
-            <CardContent className="px-4 md:px-6 pb-6 space-y-6">
+            <div className="p-4 md:p-6 space-y-8">
                 {/* Summary */}
                 <div className="flex flex-wrap gap-2 justify-center text-sm">
                     {recipientName && (
-                        <span className="bg-muted px-3 py-1 rounded-full">{recipientName}さんへ</span>
+                        <span className="bg-white/10 text-white/90 border border-white/10 px-3 py-1 rounded-full">{recipientName}さんへ</span>
                     )}
                     {templateName && (
-                        <span className="bg-muted px-3 py-1 rounded-full">{templateName}</span>
+                        <span className="bg-white/10 text-white/90 border border-white/10 px-3 py-1 rounded-full">{templateName}</span>
                     )}
                     {unlockDate && (
-                        <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
+                        <span className="bg-amber-500/20 text-amber-200 border border-amber-500/20 px-3 py-1 rounded-full">
                             {format(unlockDate, "yyyy/M/d", { locale: ja })} {unlockTime} 開封
                         </span>
                     )}
                 </div>
 
                 {/* Main CTA: PDF Export */}
-                <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 text-center space-y-3">
-                    <div className="flex items-center justify-center gap-2 text-primary font-semibold">
+                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-6 text-center space-y-4">
+                    <div className="flex items-center justify-center gap-2 text-indigo-300 font-semibold">
                         <FileText className="h-5 w-5" />
                         まずはPDFを保存
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-indigo-200/60">
                         リンク・コード・バックアップを3ページに分けて出力します
                     </p>
-                    <Button size="lg" className="w-full" onClick={onExportPDF} disabled={!shareUrl}>
+                    <Button
+                        size="lg"
+                        className="w-full bg-indigo-500 hover:bg-indigo-400 text-white border-0 font-bold shadow-lg shadow-indigo-500/20"
+                        onClick={onExportPDF}
+                        disabled={!shareUrl}
+                    >
                         <FileText className="mr-2 h-5 w-5" />
                         PDFを印刷/保存
                     </Button>
                     {!shareUrl && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-white/30">
                             共有リンクを生成してからPDFを出力できます
                         </p>
                     )}
                 </div>
 
-                {/* Warning - Short & Visual */}
-                <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {/* Warning */}
+                <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-300">
                     <AlertTriangle className="h-5 w-5 shrink-0" />
                     <span><strong>リンクとコードを同じスクショに入れない</strong></span>
                 </div>
@@ -126,22 +129,26 @@ export function LetterCompletionView({
                     collapsible
                     value={activeStep}
                     onValueChange={setActiveStep}
-                    className="space-y-2"
+                    className="space-y-4"
                 >
                     {/* Step 1: Generate Share Link */}
-                    <AccordionItem value="step-1" className="border rounded-lg overflow-hidden">
-                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                    <AccordionItem value="step-1" className="bg-white/5 border border-white/5 rounded-xl overflow-hidden px-0">
+                        <AccordionTrigger className="px-4 py-4 hover:no-underline text-white hover:bg-white/5 transition-colors">
                             <div className="flex items-center gap-3">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${shareUrl ? "bg-green-100 text-green-600" : "bg-primary/10 text-primary"}`}>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold border ${shareUrl ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-white/10 text-white/70 border-white/10"}`}>
                                     {shareUrl ? <Check className="h-4 w-4" /> : "1"}
                                 </div>
                                 <span className="font-medium">共有リンクを生成</span>
-                                {shareUrl && <span className="text-xs text-green-600 ml-2">✓ 完了</span>}
+                                {shareUrl && <span className="text-xs text-green-400 ml-2">✓ 完了</span>}
                             </div>
                         </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4 pt-2 space-y-3">
+                        <AccordionContent className="px-4 pb-4 pt-2 space-y-4 border-t border-white/5">
                             {!shareUrl ? (
-                                <Button onClick={onGenerateShareLink} disabled={isGeneratingShareLink} className="w-full">
+                                <Button
+                                    onClick={onGenerateShareLink}
+                                    disabled={isGeneratingShareLink}
+                                    className="w-full bg-white text-black hover:bg-white/90"
+                                >
                                     {isGeneratingShareLink ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
@@ -150,17 +157,21 @@ export function LetterCompletionView({
                                     リンクを生成する
                                 </Button>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                     <div className="flex items-center gap-2">
-                                        <Input value={shareUrl} readOnly className="text-sm bg-background" />
-                                        <Button size="icon" variant="outline" onClick={handleCopyShareUrl}>
+                                        <Input
+                                            value={shareUrl}
+                                            readOnly
+                                            className="text-sm bg-black/40 border-white/10 text-white/90 focus-visible:ring-indigo-500 h-11"
+                                        />
+                                        <Button size="icon" variant="outline" onClick={handleCopyShareUrl} className="shrink-0 bg-transparent border-white/10 text-white hover:bg-white/10 h-11 w-11">
                                             <Copy className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-3">
                                         <Button
                                             variant="outline"
-                                            className="flex-1 bg-[#06C755] hover:bg-[#05b34d] text-white border-0"
+                                            className="flex-1 bg-[#06C755]/10 hover:bg-[#06C755]/20 text-[#06C755] border-[#06C755]/30 h-10"
                                             onClick={() => {
                                                 const text = `大切なあなたへの手紙が届いています。${unlockDate ? `\n開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}` : ""}\n\n※解錠コードは別途お伝えします`;
                                                 window.open(`https://line.me/R/share?text=${encodeURIComponent(text + "\n" + shareUrl)}`, "_blank");
@@ -171,7 +182,7 @@ export function LetterCompletionView({
                                         </Button>
                                         <Button
                                             variant="outline"
-                                            className="flex-1"
+                                            className="flex-1 bg-transparent hover:bg-white/5 text-white border-white/10 h-10"
                                             onClick={() => {
                                                 const subject = `大切なあなたへの手紙`;
                                                 const body = `大切なあなたへの手紙が届いています。\n\n${unlockDate ? `開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}\n\n` : ""}以下のリンクからご覧ください。\n${shareUrl}\n\n※解錠コードは別途お伝えします`;
@@ -185,7 +196,7 @@ export function LetterCompletionView({
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="w-full text-muted-foreground"
+                                        className="w-full text-white/40 hover:text-white"
                                         onClick={() => setActiveStep("step-2")}
                                     >
                                         次へ <ArrowRight className="ml-1 h-4 w-4" />
@@ -196,47 +207,47 @@ export function LetterCompletionView({
                     </AccordionItem>
 
                     {/* Step 2: Send Unlock Code */}
-                    <AccordionItem value="step-2" className="border rounded-lg overflow-hidden">
-                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                    <AccordionItem value="step-2" className="bg-white/5 border border-white/5 rounded-xl overflow-hidden px-0">
+                        <AccordionTrigger className="px-4 py-4 hover:no-underline text-white hover:bg-white/5 transition-colors">
                             <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">
+                                <div className="w-7 h-7 rounded-full bg-white/10 text-white/70 flex items-center justify-center text-sm font-bold border border-white/10">
                                     2
                                 </div>
                                 <span className="font-medium">解錠コードを別経路で送る</span>
                             </div>
                         </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4 pt-2 space-y-3">
+                        <AccordionContent className="px-4 pb-4 pt-2 space-y-4 border-t border-white/5">
                             <div className="flex items-center gap-2">
                                 <Input
                                     value={unlockCode}
                                     readOnly
-                                    className="font-mono text-center text-lg tracking-widest bg-background"
+                                    className="font-mono text-center text-lg tracking-widest bg-black/40 border-white/10 text-indigo-300 h-14"
                                 />
-                                <Button size="icon" variant="outline" onClick={handleCopyUnlockCode}>
-                                    <Copy className="h-4 w-4" />
+                                <Button size="icon" variant="outline" onClick={handleCopyUnlockCode} className="bg-transparent border-white/10 text-white hover:bg-white/10 h-14 w-14 shrink-0">
+                                    <Copy className="h-5 w-5" />
                                 </Button>
                             </div>
-                            <p className="text-xs text-muted-foreground text-center">
+                            <p className="text-xs text-white/50 text-center">
                                 リンクとは<strong>別のメッセージ</strong>で送ってください
                             </p>
                         </AccordionContent>
                     </AccordionItem>
 
                     {/* Step 3: Save Backup */}
-                    <AccordionItem value="step-3" className="border rounded-lg overflow-hidden">
-                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                    <AccordionItem value="step-3" className="bg-white/5 border border-white/5 rounded-xl overflow-hidden px-0">
+                        <AccordionTrigger className="px-4 py-4 hover:no-underline text-white hover:bg-white/5 transition-colors">
                             <div className="flex items-center gap-3">
-                                <div className="w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-sm font-bold">
+                                <div className="w-7 h-7 rounded-full bg-white/5 text-white/50 flex items-center justify-center text-sm font-bold border border-white/5">
                                     3
                                 </div>
                                 <span className="font-medium">バックアップを保管（送信者用）</span>
                             </div>
                         </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4 pt-2 space-y-3">
-                            <div className="p-3 bg-muted/50 rounded-lg">
-                                <code className="text-xs break-all">{backupShare}</code>
+                        <AccordionContent className="px-4 pb-4 pt-2 space-y-3 border-t border-white/5">
+                            <div className="p-3 bg-black/40 border border-white/5 rounded-lg">
+                                <code className="text-xs break-all text-white/70">{backupShare}</code>
                             </div>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-white/40">
                                 解錠コードを紛失した場合の緊急復旧用。<br />
                                 <strong>受取人には渡さず</strong>、安全な場所に保管してください。
                             </p>
@@ -245,15 +256,24 @@ export function LetterCompletionView({
                 </Accordion>
 
                 {/* Bottom Actions */}
-                <div className="flex gap-3 pt-2">
-                    <Button variant="outline" onClick={() => navigate("/")} className="flex-1">
+                <div className="flex gap-4 pt-4">
+                    <Button
+                        variant="outline"
+                        onClick={() => navigate("/")}
+                        className="flex-1 h-12 bg-transparent border-white/10 text-white/60 hover:text-white hover:bg-white/5 hover:border-white/20"
+                    >
+                        <Home className="mr-2 h-4 w-4" />
                         ホームへ
                     </Button>
-                    <Button onClick={onReset} className="flex-1">
+                    <Button
+                        onClick={onReset}
+                        className="flex-1 h-12 bg-white text-black hover:bg-white/90 font-semibold"
+                    >
+                        <PenTool className="mr-2 h-4 w-4" />
                         もう1通書く
                     </Button>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }

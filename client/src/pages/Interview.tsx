@@ -2,13 +2,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { ArrowLeft, Send, Loader2, Sparkles, User, Bot, FileText } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Sparkles, User, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Message = {
@@ -118,16 +116,26 @@ export default function Interview() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <div className="min-h-screen bg-[#050505] text-white flex flex-col font-sans antialiased relative">
+            {/* Background Texture */}
+            <div className="fixed inset-0 z-0 pointer-events-none">
+                <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+            </div>
+
             {/* ヘッダー */}
-            <header className="bg-white border-b px-4 py-3 sticky top-0 z-10 flex items-center justify-between shadow-sm">
+            <header className="border-b border-white/5 bg-[#050505]/80 backdrop-blur-md px-4 py-3 sticky top-0 z-50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/create")}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => navigate("/create")}
+                        className="text-white/70 hover:text-white hover:bg-white/5 rounded-full"
+                    >
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div className="flex flex-col">
-                        <span className="font-bold text-slate-800">AIインタビュアー</span>
-                        <span className="text-xs text-slate-500">あなたの想いを引き出します</span>
+                        <span className="font-bold text-white tracking-tight">AIインタビュアー</span>
+                        <span className="text-xs text-white/50">あなたの想いを引き出します</span>
                     </div>
                 </div>
 
@@ -135,23 +143,25 @@ export default function Interview() {
                     <Button
                         onClick={handleGenerateDraft}
                         disabled={isProcessing}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 transition-all shadow-md hover:shadow-lg"
+                        size="sm"
+                        className="bg-white text-black hover:bg-white/90 gap-2 transition-all font-semibold rounded-full shadow-[0_0_15px_rgba(255,255,255,0.1)]"
                     >
-                        {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        {isProcessing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                         手紙にする
                     </Button>
                 )}
             </header>
 
             {/* チャットエリア */}
-            <div className="flex-1 overflow-hidden relative">
+            <div className="flex-1 overflow-hidden relative z-10">
                 <div
                     ref={scrollRef}
-                    className="h-full overflow-y-auto p-4 space-y-4 pb-20 scroll-smooth"
+                    className="h-full overflow-y-auto p-4 space-y-6 pb-20 scroll-smooth"
                 >
                     {messages.length === 0 && !isProcessing && (
-                        <div className="flex justify-center items-center h-full text-slate-400">
-                            <Loader2 className="h-8 w-8 animate-spin" />
+                        <div className="flex flex-col justify-center items-center h-full text-white/30 space-y-4">
+                            <Bot className="h-12 w-12 opacity-50" />
+                            <p className="text-sm">AIがあなたの手紙作成をお手伝いします</p>
                         </div>
                     )}
 
@@ -163,17 +173,19 @@ export default function Interview() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                             >
-                                <div className={`flex items-end gap-2 max-w-[85%] md:max-w-[70%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                                <div className={`flex items-end gap-3 max-w-[85%] md:max-w-[70%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
                                     {/* アバター */}
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.sender === "user" ? "bg-indigo-100 text-indigo-600" : "bg-emerald-100 text-emerald-600"
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${msg.sender === "user"
+                                        ? "bg-white/10 text-white border-white/20"
+                                        : "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
                                         }`}>
-                                        {msg.sender === "user" ? <User className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
+                                        {msg.sender === "user" ? <User className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                                     </div>
 
                                     {/* 吹き出し */}
-                                    <div className={`px-4 py-3 rounded-2xl shadow-sm text-sm md:text-base leading-relaxed whitespace-pre-wrap ${msg.sender === "user"
-                                            ? "bg-indigo-600 text-white rounded-tr-none"
-                                            : "bg-white text-slate-800 border border-slate-100 rounded-tl-none"
+                                    <div className={`px-5 py-3 rounded-2xl text-sm md:text-base leading-relaxed whitespace-pre-wrap shadow-sm ${msg.sender === "user"
+                                        ? "bg-white text-black rounded-tr-sm"
+                                        : "bg-[#1a1a1a] text-white border border-white/10 rounded-tl-sm"
                                         }`}>
                                         {msg.content}
                                     </div>
@@ -188,14 +200,14 @@ export default function Interview() {
                             animate={{ opacity: 1 }}
                             className="flex justify-start"
                         >
-                            <div className="flex items-end gap-2">
-                                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                                    <Bot className="h-5 w-5" />
+                            <div className="flex items-end gap-3">
+                                <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center">
+                                    <Sparkles className="h-4 w-4" />
                                 </div>
-                                <div className="bg-white border border-slate-100 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1">
-                                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
+                                <div className="bg-[#1a1a1a] border border-white/10 px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                    <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                    <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"></span>
                                 </div>
                             </div>
                         </motion.div>
@@ -204,24 +216,26 @@ export default function Interview() {
             </div>
 
             {/* 入力エリア */}
-            <div className="bg-white border-t p-4 pb-safe sticky bottom-0 z-10 w-full">
+            <div className="border-t border-white/5 bg-[#050505] p-4 pb-safe sticky bottom-0 z-20 w-full">
                 <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto relative flex items-center gap-2">
                     <Input
                         value={inputMessage}
                         onChange={(e) => setInputMessage(e.target.value)}
-                        placeholder="メッセージを入力..."
+                        placeholder="想いを入力..."
                         disabled={isProcessing}
                         autoFocus
-                        className="flex-1 h-12 rounded-full border-slate-300 focus:ring-indigo-500 focus:border-indigo-500 pl-4 pr-12 shadow-sm"
+                        className="flex-1 h-12 rounded-full bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:bg-white/10 focus:ring-white/20 focus:border-white/20 pl-6 pr-12 transition-all"
                     />
                     <Button
                         type="submit"
                         size="icon"
                         disabled={!inputMessage.trim() || isProcessing}
-                        className={`absolute right-1.5 h-9 w-9 rounded-full transition-all ${inputMessage.trim() ? "bg-indigo-600 hover:bg-indigo-700" : "bg-slate-200"
+                        className={`absolute right-1.5 h-9 w-9 rounded-full transition-all ${inputMessage.trim()
+                            ? "bg-white text-black hover:bg-white/90"
+                            : "bg-white/10 text-white/30"
                             }`}
                     >
-                        <Send className="h-4 w-4 text-white" />
+                        <Send className="h-4 w-4" />
                     </Button>
                 </form>
             </div>

@@ -15,15 +15,15 @@ interface DraftData {
   currentStep?: string;
 }
 
-interface UseDraftAutoSaveOptions {
+interface UseDraftAutoSaveOptions extends Partial<DraftData> {
   debounceMs?: number;
   onSaved?: () => void;
   onError?: (error: Error) => void;
 }
 
 export function useDraftAutoSave(options: UseDraftAutoSaveOptions = {}) {
-  const { debounceMs = 2000, onSaved, onError } = options;
-  
+  const { debounceMs = 2000, onSaved, onError, ...data } = options;
+
   const [draftId, setDraftId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -46,7 +46,7 @@ export function useDraftAutoSave(options: UseDraftAutoSaveOptions = {}) {
           currentStep: data.currentStep || "template",
         });
         setDraftId(result.id);
-        
+
         // 作成後に追加データがあれば更新
         if (data.audioUrl || data.transcription || data.aiDraft || data.finalContent) {
           await updateDraftMutation.mutateAsync({
@@ -61,7 +61,7 @@ export function useDraftAutoSave(options: UseDraftAutoSaveOptions = {}) {
           ...data,
         });
       }
-      
+
       setLastSaved(new Date());
       onSaved?.();
     } catch (error) {
@@ -75,7 +75,7 @@ export function useDraftAutoSave(options: UseDraftAutoSaveOptions = {}) {
   // debounce付きの保存
   const save = useCallback((data: DraftData) => {
     pendingDataRef.current = data;
-    
+
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -112,6 +112,23 @@ export function useDraftAutoSave(options: UseDraftAutoSaveOptions = {}) {
       timeoutRef.current = null;
     }
   }, []);
+
+  // Auto-save when data changes
+  useEffect(() => {
+    save(data);
+  }, [
+    save,
+    data.templateName,
+    data.recipientName,
+    data.recipientRelation,
+    data.audioUrl,
+    data.audioBase64,
+    data.transcription,
+    data.aiDraft,
+    data.finalContent,
+    data.unlockAt,
+    data.currentStep
+  ]);
 
   // クリーンアップ
   useEffect(() => {

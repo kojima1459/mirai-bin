@@ -3,11 +3,13 @@ import { useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { decryptLetter } from "@/lib/crypto";
 import { ShareStateView } from "@/components/share/ShareStateView";
 import { UnlockForm } from "@/components/share/UnlockForm";
 import { DecryptedLetterView } from "@/components/share/DecryptedLetterView";
 import { deriveShareLetterState, ShareLetterState } from "@/lib/shareLetterState";
+import { AnimatePresence } from "framer-motion";
+import { useLetterDecryption } from "@/hooks/useLetterDecryption";
+import { toast } from "sonner";
 
 export default function ShareLetter() {
   const [match, params] = useRoute("/share/:token");
@@ -16,14 +18,20 @@ export default function ShareLetter() {
 
   // UI State
   const [unlockCode, setUnlockCode] = useState("");
-  const [isDecrypting, setIsDecrypting] = useState(false);
-  const [decryptionError, setDecryptionError] = useState<string | null>(null);
 
-  // Decrypted Content
-  const [decryptedLetter, setDecryptedLetter] = useState<{
-    content: string;
-    audioUrl?: string;
-  } | null>(null);
+  // Custom Hook for Logic Refactor
+  const {
+    decrypt,
+    isDecrypting,
+    error: decryptError,
+    decryptedContent,
+    resetState
+  } = useLetterDecryption({
+    shareToken,
+    onSuccess: () => {
+      // Optional: Could trigger confetti or analytics here
+    }
+  });
 
   // tRPC Query
   const {
@@ -39,21 +47,33 @@ export default function ShareLetter() {
     }
   );
 
-  const markOpenedMutation = trpc.letter.markOpened.useMutation();
+  // Refactor: Reset hook state when data changes (replaces onSuccess)
+  useEffect(() => {
+    if (data) {
+      resetState();
+    }
+  }, [data]);
 
   // State Derivation
-  const state: ShareLetterState = decryptionError
+  // Map hook specific "AUTH" error to the generic "CODE_INVALID" state for UI compatibility
+  const state: ShareLetterState = decryptError === "AUTH"
     ? "CODE_INVALID"
     : deriveShareLetterState(data, fetchError);
 
-  // DEV-only: Log state transitions for debugging
+  // Effect: Handle Network/System errors via Toast
+  useEffect(() => {
+    if (decryptError === "NETWORK") {
+      toast.error("通信エラーが発生しました", { description: "インターネット接続を確認してください" });
+    } else if (decryptError === "SYSTEM") {
+      toast.error("システムエラー", { description: "予期せぬエラーが発生しました。時間を置いてお試しください。" });
+    }
+  }, [decryptError]);
+
+  // DEV-only: Log state transitions
   if (import.meta.env.DEV) {
     console.debug(`[ShareLetter] State: ${state}`, {
       canUnlock: data?.canUnlock,
-      unlockedAt: data?.letter?.unlockedAt ?? null,
-      serverError: data?.error ?? null,
-      hasDecryptionError: !!decryptionError,
-      hasFetchError: !!fetchError,
+      decryptError,
     });
   }
 
@@ -64,52 +84,15 @@ export default function ShareLetter() {
     }
   }, [data]);
 
-  const handleUnlock = async () => {
-    if (!data || !data.canUnlock || !data.unlockEnvelope) return;
-
-    setIsDecrypting(true);
-    setDecryptionError(null);
-
-    try {
-      // 1. Verify code length format locally
-      if (unlockCode.length !== 12) {
-        throw new Error("解錠コードは12文字です");
-      }
-
-      // 2. Decrypt
-      const result = await decryptLetter({
-        unlockCode,
-        unlockEnvelope: data.unlockEnvelope,
-        serverShare: data.serverShare,
-        encryptedAudio: data.encryptedAudio,
-        letter: {
-          encryptionIv: data.letter.encryptionIv,
-          ciphertextUrl: data.letter.ciphertextUrl,
-        }
-      });
-
-      // 3. Mark as opened
-      await markOpenedMutation.mutateAsync({ shareToken });
-
-      setDecryptedLetter(result);
-    } catch (err: unknown) {
-      // DEV-only: Log decryption failure details
-      if (import.meta.env.DEV) {
-        console.debug("[ShareLetter] Decryption failed:", {
-          error: err instanceof Error ? err.message : "Unknown error",
-          codeLength: unlockCode.length,
-        });
-      }
-      console.error("Decryption failed:", err);
-      setDecryptionError("解除コードが正しくありません");
-    } finally {
-      setIsDecrypting(false);
+  const handleUnlock = () => {
+    if (data) {
+      decrypt(unlockCode, data);
     }
   };
 
   const handleRetry = () => {
     if (state === "CODE_INVALID") {
-      setDecryptionError(null);
+      resetState();
       setUnlockCode("");
     } else {
       refetch();
@@ -121,45 +104,42 @@ export default function ShareLetter() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-[#050505] text-white">
+        <Loader2 className="h-8 w-8 animate-spin text-white/20" />
       </div>
     );
   }
 
-  // 1. Decrypted Content View
-  if (decryptedLetter) {
-    return (
-      <DecryptedLetterView
-        content={decryptedLetter.content}
-        audioUrl={decryptedLetter.audioUrl}
-        recipientName={data?.letter?.recipientName}
-        templateUsed={data?.letter?.templateUsed}
-        createdAt={data?.letter?.createdAt}
-      />
-    );
-  }
-
-  // 2. Ready to Unlock (Input Form)
-  if (state === "READY_TO_UNLOCK") {
-    return (
-      <UnlockForm
-        recipientName={data?.letter?.recipientName}
-        templateUsed={data?.letter?.templateUsed}
-        unlockCode={unlockCode}
-        isDecrypting={isDecrypting}
-        onUnlockCodeChange={setUnlockCode}
-        onSubmit={handleUnlock}
-      />
-    );
-  }
-
-  // 3. Error / Wait States
   return (
-    <ShareStateView
-      state={state}
-      unlockAt={data?.letter?.unlockAt}
-      onRetry={handleRetry}
-    />
+    <AnimatePresence mode="wait">
+      {decryptedContent ? (
+        <DecryptedLetterView
+          key="decrypted"
+          content={decryptedContent.content}
+          audioUrl={decryptedContent.audioUrl}
+          recipientName={data?.letter?.recipientName ?? undefined}
+          templateUsed={data?.letter?.templateUsed ?? undefined}
+          createdAt={data?.letter?.createdAt}
+        />
+      ) : state === "READY_TO_UNLOCK" ? (
+        <UnlockForm
+          key="unlock"
+          recipientName={data?.letter?.recipientName ?? undefined}
+          templateUsed={data?.letter?.templateUsed ?? undefined}
+          unlockCode={unlockCode}
+          isDecrypting={isDecrypting}
+          onUnlockCodeChange={setUnlockCode}
+          onSubmit={handleUnlock}
+          decryptionError={decryptError === "AUTH"}
+        />
+      ) : (
+        <ShareStateView
+          key="state"
+          state={state}
+          unlockAt={data?.letter?.unlockAt}
+          onRetry={handleRetry}
+        />
+      )}
+    </AnimatePresence>
   );
 }

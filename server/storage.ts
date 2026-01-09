@@ -1,102 +1,91 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
+// Firebase Storage integration using Admin SDK
+// Replaces the Forge API proxy with direct Firebase Storage access
 
-import { ENV } from './_core/env';
+import admin from "firebase-admin";
 
-type StorageConfig = { baseUrl: string; apiKey: string };
-
-function getStorageConfig(): StorageConfig {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
-
-  if (!baseUrl || !apiKey) {
-    throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
-  }
-
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
-}
-
-function buildUploadUrl(baseUrl: string, relKey: string): URL {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-
-async function buildDownloadUrl(
-  baseUrl: string,
-  relKey: string,
-  apiKey: string
-): Promise<string> {
-  const downloadApiUrl = new URL(
-    "v1/storage/downloadUrl",
-    ensureTrailingSlash(baseUrl)
-  );
-  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
-  const response = await fetch(downloadApiUrl, {
-    method: "GET",
-    headers: buildAuthHeaders(apiKey),
+// Get or initialize Firebase app
+let firebaseApp: admin.app.App;
+try {
+  firebaseApp = admin.app();
+} catch {
+  firebaseApp = admin.initializeApp({
+    projectId: "miraibin",
+    storageBucket: "miraibin.firebasestorage.app",
   });
-  return (await response.json()).url;
 }
 
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
-}
+// Get storage bucket
+const bucket = admin.storage(firebaseApp).bucket("miraibin.firebasestorage.app");
 
-function normalizeKey(relKey: string): string {
-  return relKey.replace(/^\/+/, "");
-}
-
-function toFormData(
-  data: Buffer | Uint8Array | string,
-  contentType: string,
-  fileName: string
-): FormData {
-  const blob =
-    typeof data === "string"
-      ? new Blob([data], { type: contentType })
-      : new Blob([data as any], { type: contentType });
-  const form = new FormData();
-  form.append("file", blob, fileName || "file");
-  return form;
-}
-
-function buildAuthHeaders(apiKey: string): HeadersInit {
-  return { Authorization: `Bearer ${apiKey}` };
-}
-
+/**
+ * Upload file to Firebase Storage
+ * @param relKey - Relative path for the file (e.g., "audio/user123/abc.webm")
+ * @param data - File data as Buffer, Uint8Array, or string
+ * @param contentType - MIME type of the file
+ * @returns Object with key and public URL
+ */
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: buildAuthHeaders(apiKey),
-    body: formData,
+  const key = relKey.replace(/^\/+/, ""); // Remove leading slashes
+  const file = bucket.file(key);
+
+  // Convert data to Buffer if needed
+  const buffer = typeof data === "string"
+    ? Buffer.from(data, "utf-8")
+    : Buffer.from(data);
+
+  // Upload the file
+  await file.save(buffer, {
+    metadata: {
+      contentType,
+    },
+    resumable: false, // Simpler for smaller files
   });
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
-    );
-  }
-  const url = (await response.json()).url;
+  // Make the file publicly accessible
+  await file.makePublic();
+
+  // Get public URL
+  const url = `https://storage.googleapis.com/${bucket.name}/${key}`;
+
   return { key, url };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  return {
-    key,
-    url: await buildDownloadUrl(baseUrl, key, apiKey),
-  };
+/**
+ * Get signed URL for private file download
+ * @param relKey - Relative path for the file
+ * @returns Object with key and signed URL
+ */
+export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
+  const key = relKey.replace(/^\/+/, "");
+  const file = bucket.file(key);
+
+  // Generate signed URL (valid for 1 hour)
+  const [url] = await file.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 60 * 60 * 1000, // 1 hour
+  });
+
+  return { key, url };
+}
+
+/**
+ * Delete file from Firebase Storage
+ * @param relKey - Relative path for the file
+ */
+export async function storageDelete(relKey: string): Promise<void> {
+  const key = relKey.replace(/^\/+/, "");
+  const file = bucket.file(key);
+
+  try {
+    await file.delete();
+  } catch (error: any) {
+    // Ignore "not found" errors
+    if (error.code !== 404) {
+      throw error;
+    }
+  }
 }

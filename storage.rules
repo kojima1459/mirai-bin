@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Audio files - allow public read (Admin SDK writes bypasses rules)
+    match /audio/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only Admin SDK can write
+    }
+
+    // Ciphertext files - allow public read (encrypted content only)
+    match /ciphertext/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only Admin SDK can write
+    }
+
+    // Encrypted audio files - allow public read
+    match /encrypted-audio/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Only Admin SDK can write
+    }
+
+    // Default: deny all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

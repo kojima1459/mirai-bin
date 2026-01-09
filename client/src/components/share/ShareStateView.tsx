@@ -112,34 +112,41 @@ export function ShareStateView({ state, unlockAt, onRetry }: ShareStateViewProps
             </div>
 
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
+                key={state}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ duration: 0.4 }}
                 className="w-full max-w-sm mx-auto text-center space-y-8 relative z-10"
             >
                 <div className="flex justify-center">
-                    <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 text-white/70 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 text-white/70 flex items-center justify-center backdrop-blur-sm">
                         {config.icon}
                     </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                     <h1 className="text-2xl font-bold tracking-tight">{config.title}</h1>
                     <div className="text-white/50 leading-relaxed text-sm">
                         {config.body}
                     </div>
                 </div>
 
-                <div className="pt-4 space-y-4">
+                <div className="pt-6 space-y-4">
                     {config.action}
 
-                    <div className="pt-8">
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className="pt-8"
+                    >
                         <Link href="/">
                             <span className="text-xs text-white/30 hover:text-white cursor-pointer transition-colors border-b border-transparent hover:border-white/20 pb-0.5">
                                 mirai-bin Top
                             </span>
                         </Link>
-                    </div>
+                    </motion.div>
                 </div>
             </motion.div>
         </div>

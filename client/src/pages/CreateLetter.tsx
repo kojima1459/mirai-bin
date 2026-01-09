@@ -1,124 +1,94 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { trpc } from "@/lib/trpc";
-import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
-import { useEncryption } from "@/hooks/useEncryption";
-import { formatDuration } from "@/lib/audio";
-
-import { useLocation, useSearch } from "wouter";
-import { useDraftAutoSave } from "@/hooks/useDraftAutoSave";
-import { splitKey } from "@/lib/shamir";
-import { wrapClientShare, generateUnlockCode, encryptAudio, arrayBufferToBase64 } from "@/lib/crypto";
-import { openPrintDialog } from "@/lib/pdfExport";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Cake,
-  GraduationCap,
-  Heart,
-  Loader2,
-  Mail,
-  Mic,
-  Square,
-  Check,
-  Lock,
-  Calendar,
-  Share2,
-  Copy,
-  ExternalLink,
-  MessageCircle,
-  School,
-  BookOpen,
-  Star,
-  Briefcase,
-  Baby,
-  HandHeart,
-  Key,
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  Download,
-  FileText,
-  RotateCcw,
-  Bell,
-  Sparkles
-} from "lucide-react";
-import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
-import { TemplateAccordion } from "@/components/TemplateAccordion";
-import { motion } from "framer-motion";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  ArrowLeft, Check, Loader2, Mail, Lock
+} from "lucide-react";
+import { motion } from "framer-motion";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+// Removed unused imports: Textarea, Checkbox, Popover..., Calendar
+
+import { TemplateCatalogDialog } from "@/components/TemplateCatalogDialog";
 import { LetterCompletionView } from "@/components/LetterCompletionView";
+import { TemplateSelectStep } from "@/components/create-letter/TemplateSelectStep";
+import { RecordingStep } from "@/components/create-letter/RecordingStep";
+import { ReviewStep } from "@/components/create-letter/ReviewStep";
 
-type Step = "template" | "recording" | "transcribing" | "generating" | "editing" | "encrypting" | "complete";
-
-const iconMap: Record<string, React.ReactNode> = {
-  cake: <Cake className="h-6 w-6" />,
-  "graduation-cap": <GraduationCap className="h-6 w-6" />,
-  heart: <Heart className="h-6 w-6" />,
-  school: <School className="h-6 w-6" />,
-  "book-open": <BookOpen className="h-6 w-6" />,
-  star: <Star className="h-6 w-6" />,
-  briefcase: <Briefcase className="h-6 w-6" />,
-  baby: <Baby className="h-6 w-6" />,
-  "hand-heart": <HandHeart className="h-6 w-6" />,
-  mail: <Mail className="h-6 w-6" />,
-};
-
-const MAX_DURATION = 90; // 90秒
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { useDraftAutoSave } from "@/hooks/useDraftAutoSave";
+import { trpc } from "@/lib/trpc";
+import { useEncryption } from "@/hooks/useEncryption";
+import { openPrintDialog } from "@/lib/pdfExport";
+import {
+  arrayBufferToBase64,
+  generateUnlockCode,
+  wrapClientShare,
+  encryptAudio
+} from "@/lib/crypto";
+import { splitKey } from "@/lib/shamir";
 
 export default function CreateLetter() {
-  const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
-  const searchString = useSearch();
-  const searchParams = new URLSearchParams(searchString);
-  const initialTemplate = searchParams.get("template") || "";
-  const draftIdParam = searchParams.get("draft");
+  const { user, loading: authLoading } = useAuth();
 
-  // State
-  const [step, setStep] = useState<Step>("template");
-  const [selectedTemplate, setSelectedTemplate] = useState(initialTemplate);
+  const [step, setStep] = useState<"template" | "recording" | "transcribing" | "generating" | "editing" | "encrypting" | "complete">("template");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [isRawMode, setIsRawMode] = useState(false);
+
   const [recipientName, setRecipientName] = useState("");
   const [recipientRelation, setRecipientRelation] = useState("");
+  const [unlockDate, setUnlockDate] = useState<Date>();
+  const [unlockTime, setUnlockTime] = useState("09:00");
+
   const [transcription, setTranscription] = useState("");
   const [aiDraft, setAiDraft] = useState("");
   const [finalContent, setFinalContent] = useState("");
-  const [audioUrl, setAudioUrl] = useState("");
+
   const [letterId, setLetterId] = useState<number | null>(null);
-  const [unlockDate, setUnlockDate] = useState<Date | undefined>(undefined);
-  const [unlockTime, setUnlockTime] = useState("09:00");
-  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [unlockCode, setUnlockCode] = useState("");
+  const [backupShare, setBackupShare] = useState("");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [isLoadingDraft, setIsLoadingDraft] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
 
-  // ゼロ知識設計: 解錠コードとバックアップシェア
-  const [unlockCode, setUnlockCode] = useState<string | null>(null);
-  const [backupShare, setBackupShare] = useState<string | null>(null);
-  const [showUnlockCode, setShowUnlockCode] = useState(false);
-  const [showBackupShare, setShowBackupShare] = useState(false);
-  const [unlockCodeViewCount, setUnlockCodeViewCount] = useState(0); // 再表示制限用
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDays, setReminderDays] = useState<number[]>([1]);
 
-  // リマインダー設定
-  const [reminderEnabled, setReminderEnabled] = useState(true);
-  const [reminderDays, setReminderDays] = useState<number[]>([30, 7, 1]); // デフォルト: 30日前、7日前、1日前
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isEncrypting, setIsEncrypting] = useState(false);
+  const [encryptionProgress, setEncryptionProgress] = useState(0);
 
-  // Hooks
-  const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
-  const { isRecording, elapsed, remaining, start, stop, base64, result: recordingResult, error: recordingError, reset: resetRecording } = useVoiceRecorder({ maxDuration: MAX_DURATION });
-  const { isEncrypting, progress: encryptionProgress, encrypt, reset: resetEncryption } = useEncryption();
+  // useDraftAutoSave hook instead of manual state
+  const { draftId, isSaving, lastSaved, resetDraft } = useDraftAutoSave({
+    templateName: selectedTemplate,
+    recipientName,
+    finalContent,
+    transcription,
+    aiDraft,
+    currentStep: step
+  });
 
-  // Mutations
+  const {
+    isRecording,
+    start: startRecording,
+    stop: stopRecording,
+    reset: resetRecording,
+    result: recordingResult,
+    base64,
+    elapsed,
+    remaining,
+    error: recordingError
+  } = useVoiceRecorder();
+
+  // Updated useEncryption usage
+  const { encrypt, reset: resetEncryption } = useEncryption();
+
   const uploadAudioMutation = trpc.storage.uploadAudio.useMutation();
   const transcribeMutation = trpc.ai.transcribe.useMutation();
   const generateDraftMutation = trpc.ai.generateDraft.useMutation();
@@ -130,94 +100,22 @@ export default function CreateLetter() {
   const deleteDraftMutation = trpc.draft.delete.useMutation();
   const updateReminderMutation = trpc.reminder.update.useMutation();
 
-  // 下書き自動保存
-  const { draftId, isSaving, lastSaved, save: saveDraft, saveImmediately, loadDraft, resetDraft, setDraftId } = useDraftAutoSave({
-    debounceMs: 3000,
-    onSaved: () => {
-      // 保存成功時は静かに表示
-    },
-  });
+  const { data: templates } = trpc.template.list.useQuery();
 
-  // 下書きデータ取得
-  const { data: draftData, isLoading: isDraftLoading } = trpc.draft.get.useQuery(
-    { id: Number(draftIdParam) },
-    { enabled: !!draftIdParam }
-  );
+  const MAX_DURATION = 180;
 
-  // 下書きから復元
-  useEffect(() => {
-    if (draftData && !isLoadingDraft) {
-      setIsLoadingDraft(true);
-      setDraftId(draftData.id);
-      if (draftData.templateName) setSelectedTemplate(draftData.templateName);
-      if (draftData.recipientName) setRecipientName(draftData.recipientName);
-      if (draftData.recipientRelation) setRecipientRelation(draftData.recipientRelation);
-      if (draftData.audioUrl) setAudioUrl(draftData.audioUrl);
-      if (draftData.transcription) setTranscription(draftData.transcription);
-      if (draftData.aiDraft) setAiDraft(draftData.aiDraft);
-      if (draftData.finalContent) setFinalContent(draftData.finalContent);
-      if (draftData.unlockAt) {
-        const date = new Date(draftData.unlockAt);
-        setUnlockDate(date);
-        setUnlockTime(format(date, "HH:mm"));
-      }
-      // ステップを復元
-      if (draftData.currentStep === "editing" || draftData.finalContent) {
-        setStep("editing");
-      } else if (draftData.transcription) {
-        setStep("editing");
-      } else if (draftData.templateName) {
-        setStep("recording");
-      }
-      setIsLoadingDraft(false);
-      toast.success("下書きを読み込みました");
-    }
-  }, [draftData]);
-
-  // 自動保存（ステップや内容が変わったとき）
-  useEffect(() => {
-    // completeステップでは保存しない
-    if (step === "complete" || step === "encrypting") return;
-    // テンプレートが選択されていない場合は保存しない
-    if (!selectedTemplate && !recipientName && !transcription && !finalContent) return;
-
-    saveDraft({
-      templateName: selectedTemplate || undefined,
-      recipientName: recipientName || undefined,
-      recipientRelation: recipientRelation || undefined,
-      audioUrl: audioUrl || undefined,
-      transcription: transcription || undefined,
-      aiDraft: aiDraft || undefined,
-      finalContent: finalContent || undefined,
-      unlockAt: unlockDate ? getUnlockAt()?.toISOString() : undefined,
-      currentStep: step,
-    });
-  }, [selectedTemplate, recipientName, recipientRelation, transcription, aiDraft, finalContent, unlockDate, unlockTime, step]);
-
-  // 認証チェック
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      window.location.href = "/login";
-    }
-  }, [authLoading, isAuthenticated]);
-
-  // 録音開始
   const handleStartRecording = async () => {
     try {
-      await start();
-    } catch (err) {
-      toast.error("マイクへのアクセスが拒否されました");
+      await startRecording();
+    } catch (e) {
+      console.error(e);
+      toast.error("録音を開始できませんでした。マイクの許可設定を確認してください。");
     }
   };
 
-  // 録音停止 → 確認画面へ
   const handleStopRecording = async () => {
-    const result = await stop();
-    if (!result || !base64) return;
-    // 録音完了後は確認画面を表示（次へ進むボタンで文字起こしへ）
+    await stopRecording();
   };
-
-  // 次へ進む（文字起こし → AI生成）
   const handleProceedToTranscription = async () => {
     if (!base64) return;
 
@@ -237,12 +135,20 @@ export default function CreateLetter() {
       });
       setTranscription(transcribeResult.text);
 
+      // Rawモード（そのままモード）の場合はAI生成をスキップ
+      if (isRawMode) {
+        setAiDraft("");
+        setFinalContent(transcribeResult.text);
+        setStep("editing");
+        return;
+      }
+
       setStep("generating");
 
       // AI下書き生成
       const draftResult = await generateDraftMutation.mutateAsync({
         transcription: transcribeResult.text,
-        templateName: selectedTemplate,
+        templateName: selectedTemplate === "__free__" ? "" : selectedTemplate,
         recipientName: recipientName || undefined,
       });
       setAiDraft(draftResult.draft);
@@ -503,489 +409,220 @@ export default function CreateLetter() {
   const selectedTemplateData = templates?.find((t) => t.name === selectedTemplate);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#050505] text-white font-sans antialiased relative">
+      {/* Background Grain Texture */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+      </div>
+
       {/* ヘッダー */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-white/5 bg-[#050505]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="text-white/70 hover:text-white hover:bg-white/5 rounded-full">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-2 ml-2">
-              <Mail className="h-5 w-5 text-primary" />
-              <span className="font-semibold">手紙を書く</span>
+              <Mail className="h-5 w-5 text-white/90" />
+              <span className="font-semibold tracking-tight">手紙を書く</span>
             </div>
           </div>
           {/* 下書き保存インジケーター */}
           {step !== "complete" && (draftId || isSaving || lastSaved) && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-white/40">
               {isSaving ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>保存中...</span>
                 </>
               ) : lastSaved ? (
-                <span>下書き保存済み</span>
+                <span>保存済み</span>
               ) : null}
             </div>
           )}
         </div>
       </header>
 
-      <main className="container py-6 md:py-8 max-w-2xl">
-        {/* ステップインジケーター - モバイル最適化 */}
-        <div className="flex items-center justify-center gap-1.5 md:gap-2 mb-6 md:mb-8">
-          {["template", "recording", "editing", "complete"].map((s, i) => (
-            <div key={s} className="flex items-center">
-              <div
-                className={`w-9 h-9 md:w-8 md:h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${step === s || (step === "transcribing" && s === "recording") || (step === "generating" && s === "recording") || (step === "encrypting" && s === "editing")
-                  ? "bg-primary text-primary-foreground"
-                  : ["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s)
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-                  }`}
-              >
-                {["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s) ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  i + 1
-                )}
+      <main className="container py-8 md:py-12 max-w-2xl relative z-10">
+        {/* ステップインジケーター */}
+        <div className="flex items-center justify-center gap-2 mb-12">
+          {["template", "recording", "editing", "complete"].map((s, i) => {
+            const isActive = step === s || (step === "transcribing" && s === "recording") || (step === "generating" && s === "recording") || (step === "encrypting" && s === "editing");
+            const isCompleted = ["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s);
+
+            return (
+              <div key={s} className="flex items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${isActive
+                    ? "bg-white text-black"
+                    : isCompleted
+                      ? "bg-white/20 text-white"
+                      : "bg-white/5 text-white/30"
+                    }`}
+                >
+                  {isCompleted ? <Check className="h-4 w-4" /> : i + 1}
+                </div>
+                {i < 3 && <div className={`w-8 h-[1px] mx-2 ${isCompleted ? "bg-white/20" : "bg-white/5"}`} />}
               </div>
-              {i < 3 && <div className="w-6 md:w-8 h-0.5 bg-muted mx-0.5 md:mx-1" />}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* テンプレート選択 */}
         {step === "template" && (
-          <Card className="border-0 md:border shadow-none md:shadow-sm">
-            <CardHeader className="px-0 md:px-6">
-              <CardTitle className="text-xl md:text-lg">テンプレートを選ぶ</CardTitle>
-              <CardDescription className="text-base md:text-sm">
-                手紙のシーンを選んでください
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 px-0 md:px-6">
-              {templatesLoading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : templates && templates.length > 0 ? (
-                <TemplateAccordion
-                  templates={templates}
-                  selectedTemplate={selectedTemplate}
-                  onSelect={setSelectedTemplate}
-                />
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>テンプレートがありません</p>
-                </div>
-              )}
-
-              {/* AIインタビューへの誘導 */}
-              <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
-                <div className="flex items-start gap-3">
-                  <div className="bg-white p-2 rounded-full shadow-sm text-indigo-600 mt-1">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-indigo-900">書く内容に迷っていませんか？</h3>
-                    <p className="text-sm text-indigo-700 mt-1">AIがあなたにインタビューして、<br className="md:hidden" />手紙の下書きを一緒に作ります。</p>
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full md:w-auto border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
-                  onClick={() => navigate("/interview")}
-                >
-                  AIと話しながら書く
-                </Button>
-              </div>
-
-              <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-2">
-                  <Label htmlFor="recipientName" className="text-base md:text-sm">宛先の名前（任意）</Label>
-                  <Input
-                    id="recipientName"
-                    placeholder="例：太郎"
-                    value={recipientName}
-                    onChange={(e) => setRecipientName(e.target.value)}
-                    className="h-12 md:h-10 text-base md:text-sm"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="recipientRelation" className="text-base md:text-sm">関係（任意）</Label>
-                  <Select value={recipientRelation} onValueChange={setRecipientRelation}>
-                    <SelectTrigger className="h-12 md:h-10 text-base md:text-sm">
-                      <SelectValue placeholder="選択してください" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="myself">自分</SelectItem>
-                      <SelectItem value="parent">親</SelectItem>
-                      <SelectItem value="son">息子</SelectItem>
-                      <SelectItem value="daughter">娘</SelectItem>
-                      <SelectItem value="child">子ども</SelectItem>
-                      <SelectItem value="grandchild">孫</SelectItem>
-                      <SelectItem value="friend">友達</SelectItem>
-                      <SelectItem value="wife">妻</SelectItem>
-                      <SelectItem value="husband">夫</SelectItem>
-                      <SelectItem value="boyfriend">彼氏</SelectItem>
-                      <SelectItem value="girlfriend">彼女</SelectItem>
-                      <SelectItem value="colleague">同期</SelectItem>
-                      <SelectItem value="other">その他</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Button
-                onClick={() => setStep("recording")}
-                disabled={!selectedTemplate}
-                className="w-full h-12 md:h-10 text-base md:text-sm"
-              >
-                次へ
-                <ArrowRight className="ml-2 h-5 w-5 md:h-4 md:w-4" />
-              </Button>
-            </CardContent>
-          </Card>
+          <TemplateSelectStep
+            recipientName={recipientName}
+            onRecipientNameChange={setRecipientName}
+            selectedTemplate={selectedTemplate}
+            templates={templates}
+            isCatalogOpen={isCatalogOpen}
+            onCatalogOpenChange={setIsCatalogOpen}
+            onSelectFree={() => {
+              setSelectedTemplate("__free__");
+              setIsRawMode(false);
+              setStep("recording");
+            }}
+            onSelectRaw={() => {
+              setSelectedTemplate("__free__");
+              setIsRawMode(true);
+              setStep("recording");
+            }}
+            onSelectInterview={() => navigate("/interview")}
+            onSelectFromCatalog={(name) => {
+              setSelectedTemplate(name);
+              setIsRawMode(false);
+              setIsCatalogOpen(false);
+              setStep("recording");
+            }}
+            onNext={() => {
+              setStep("recording");
+              setIsRawMode(false);
+            }}
+          />
         )}
 
         {/* 録音 */}
         {step === "recording" && (
-          <Card className="border-0 md:border shadow-none md:shadow-sm">
-            <CardHeader className="px-0 md:px-6 text-center">
-              <CardTitle className="text-xl md:text-lg">想いを録音する</CardTitle>
-              <CardDescription className="text-base md:text-sm">
-                {selectedTemplateData?.recordingPrompt || "伝えたいことを自由に話してください"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 px-0 md:px-6">
-              <div className="flex flex-col items-center gap-6 py-4">
-                {isRecording ? (
-                  <>
-                    <AudioWaveform isRecording={isRecording} />
-                    <RecordingTimer elapsed={elapsed} remaining={remaining} maxDuration={MAX_DURATION} />
-                    <Button
-                      size="lg"
-                      variant="destructive"
-                      onClick={handleStopRecording}
-                      className="w-36 h-36 md:w-32 md:h-32 rounded-full shadow-lg"
-                    >
-                      <Square className="h-10 w-10 md:h-8 md:w-8" />
-                    </Button>
-                    <p className="text-base md:text-sm text-muted-foreground">
-                      タップして録音を停止
-                    </p>
-                  </>
-                ) : base64 ? (
-                  // 録音完了後の確認画面
-                  <>
-                    <motion.div
-                      initial={{ scale: 0.9, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                      className="flex flex-col items-center gap-4"
-                    >
-                      <div className="w-24 h-24 md:w-20 md:h-20 rounded-full bg-green-100 flex items-center justify-center">
-                        <Check className="h-12 w-12 md:h-10 md:w-10 text-green-600" />
-                      </div>
-                      <p className="text-lg md:text-base font-medium text-green-700">録音完了！</p>
-                      <p className="text-base md:text-sm text-muted-foreground">
-                        {elapsed}秒の音声を録音しました
-                      </p>
-                    </motion.div>
-                    <div className="flex gap-3 w-full max-w-xs">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          resetRecording();
-                        }}
-                        className="flex-1 h-12 md:h-10 text-base md:text-sm"
-                      >
-                        <RotateCcw className="mr-2 h-5 w-5 md:h-4 md:w-4" />
-                        撮り直す
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  // 録音開始前
-                  <>
-                    <motion.div
-                      initial={{ scale: 0.9, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <Button
-                        size="lg"
-                        onClick={handleStartRecording}
-                        className="w-36 h-36 md:w-32 md:h-32 rounded-full bg-primary hover:bg-primary/90 shadow-lg"
-                      >
-                        <Mic className="h-10 w-10 md:h-8 md:w-8" />
-                      </Button>
-                    </motion.div>
-                    <p className="text-base md:text-sm text-muted-foreground">
-                      タップして録音を開始（最大{MAX_DURATION}秒）
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {recordingError && (
-                <p className="text-base md:text-sm text-destructive text-center">{recordingError}</p>
-              )}
-
-              <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => setStep("template")} className="flex-1 h-12 md:h-10 text-base md:text-sm">
-                  <ArrowLeft className="mr-2 h-5 w-5 md:h-4 md:w-4" />
-                  戻る
-                </Button>
-                {base64 && (
-                  <Button
-                    onClick={handleProceedToTranscription}
-                    className="flex-1 h-12 md:h-10 text-base md:text-sm"
-                  >
-                    次へ進む
-                    <ArrowRight className="ml-2 h-5 w-5 md:h-4 md:w-4" />
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <RecordingStep
+            isRecording={isRecording}
+            onStartRecording={handleStartRecording}
+            onStopRecording={handleStopRecording}
+            onResetRecording={resetRecording}
+            base64={base64}
+            elapsed={elapsed}
+            remaining={remaining}
+            maxDuration={MAX_DURATION}
+            recordingError={recordingError}
+            selectedTemplatePrompt={selectedTemplateData?.recordingPrompt}
+            onProceed={handleProceedToTranscription}
+            onBack={() => setStep("template")}
+          />
         )}
 
         {/* 文字起こし中 */}
         {step === "transcribing" && (
-          <Card>
-            <CardContent className="py-16">
-              <div className="flex flex-col items-center gap-4">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-lg font-medium">音声を文字に変換中...</p>
-                <p className="text-sm text-muted-foreground">しばらくお待ちください</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="bg-white/5 border border-white/5 rounded-2xl p-12 text-center animate-in fade-in">
+            <Loader2 className="h-10 w-10 animate-spin text-white/70 mx-auto mb-6" />
+            <h3 className="text-lg font-bold text-white mb-2">音声を文字に変換中...</h3>
+            <p className="text-sm text-white/40">しばらくお待ちください</p>
+          </div>
         )}
 
         {/* AI生成中 */}
         {step === "generating" && (
-          <Card>
-            <CardContent className="py-16">
-              <div className="flex flex-col items-center gap-4">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-lg font-medium">手紙を作成中...</p>
-                <p className="text-sm text-muted-foreground">AIがあなたの想いを手紙にしています</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="bg-white/5 border border-white/5 rounded-2xl p-12 text-center animate-in fade-in">
+            <Loader2 className="h-10 w-10 animate-spin text-indigo-400 mx-auto mb-6" />
+            <h3 className="text-lg font-bold text-white mb-2">手紙を作成中...</h3>
+            <p className="text-sm text-white/40">AIがあなたの想いを手紙にしています</p>
+          </div>
         )}
 
         {/* 編集 */}
         {step === "editing" && (
-          <Card className="border-0 md:border shadow-none md:shadow-sm">
-            <CardHeader className="px-0 md:px-6">
-              <CardTitle className="text-xl md:text-lg">手紙を編集する</CardTitle>
-              <CardDescription className="text-base md:text-sm">
-                内容を確認・編集してください
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 px-0 md:px-6">
-              {transcription && (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground text-base md:text-sm">文字起こし結果</Label>
-                  <div className="p-3 bg-muted rounded-lg text-base md:text-sm leading-relaxed">
-                    {transcription}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="finalContent" className="text-base md:text-sm">手紙の内容</Label>
-                <Textarea
-                  id="finalContent"
-                  value={finalContent}
-                  onChange={(e) => setFinalContent(e.target.value)}
-                  rows={12}
-                  className="resize-none text-base md:text-sm leading-relaxed"
-                />
-              </div>
-
-              {/* 開封日時設定 */}
-              <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Lock className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
-                  <Label className="font-medium text-base md:text-sm">開封日時を設定（任意）</Label>
-                </div>
-                <p className="text-base md:text-sm text-muted-foreground">
-                  設定した日時まで手紙を開封できないようにします
-                </p>
-                <div className="flex flex-col md:flex-row gap-3">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="flex-1 justify-start h-12 md:h-10 text-base md:text-sm">
-                        <Calendar className="mr-2 h-5 w-5 md:h-4 md:w-4" />
-                        {unlockDate ? format(unlockDate, "yyyy年M月d日", { locale: ja }) : "日付を選択"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent
-                        mode="single"
-                        selected={unlockDate}
-                        onSelect={setUnlockDate}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <Input
-                    type="time"
-                    value={unlockTime}
-                    onChange={(e) => setUnlockTime(e.target.value)}
-                    className="w-full md:w-32 h-12 md:h-10 text-base md:text-sm"
-                  />
-                </div>
-                {unlockDate && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setUnlockDate(undefined);
-                      setUnlockTime("09:00");
-                    }}
-                    className="text-muted-foreground text-base md:text-sm"
-                  >
-                    開封日時をクリア
-                  </Button>
-                )}
-              </div>
-
-              {/* リマインダー設定（開封日時が設定されている場合のみ表示） */}
-              {unlockDate && (
-                <div className="space-y-4 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-5 w-5 md:h-4 md:w-4 text-amber-600" />
-                      <Label className="font-medium text-base md:text-sm">開封日前のリマインダー</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="reminderEnabled"
-                        checked={reminderEnabled}
-                        onCheckedChange={(checked) => setReminderEnabled(checked === true)}
-                      />
-                      <Label htmlFor="reminderEnabled" className="text-base md:text-sm cursor-pointer">
-                        有効
-                      </Label>
-                    </div>
-                  </div>
-
-                  {reminderEnabled && (
-                    <>
-                      <p className="text-base md:text-sm text-muted-foreground">
-                        開封日前にメールでお知らせします。PDFや解錠コードの保管場所を確認する機会になります。
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {[90, 30, 7, 1].map((days) => (
-                          <label
-                            key={days}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${reminderDays.includes(days)
-                              ? "bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600"
-                              : "bg-background border-input hover:bg-muted"
-                              }`}
-                          >
-                            <Checkbox
-                              checked={reminderDays.includes(days)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setReminderDays([...reminderDays, days].sort((a, b) => b - a));
-                                } else {
-                                  setReminderDays(reminderDays.filter((d) => d !== days));
-                                }
-                              }}
-                            />
-                            <span className="text-base md:text-sm">
-                              {days === 1 ? "1日前" : `${days}日前`}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        ※ 解錠コードはメールに含まれません（ゼロ知識設計）
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep("recording")} className="flex-1 h-12 md:h-10 text-base md:text-sm">
-                  <ArrowLeft className="mr-2 h-5 w-5 md:h-4 md:w-4" />
-                  録り直す
-                </Button>
-                <Button onClick={handleSave} className="flex-1 h-12 md:h-10 text-base md:text-sm">
-                  保存する
-                  <Lock className="ml-2 h-5 w-5 md:h-4 md:w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 暗号化中 */}
-        {step === "encrypting" && (
-          <Card>
-            <CardContent className="py-16">
-              <div className="flex flex-col items-center gap-4">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-lg font-medium">暗号化中...</p>
-                <p className="text-sm text-muted-foreground">
-                  あなたの手紙を安全に暗号化しています
-                </p>
-                <div className="w-full max-w-xs bg-muted rounded-full h-2 overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${encryptionProgress}%` }}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 完了（リファクタ版） */}
-        {step === "complete" && (
-          <LetterCompletionView
-            recipientName={recipientName || undefined}
-            templateName={selectedTemplateData?.displayName}
+          <ReviewStep
+            isRawMode={isRawMode}
+            transcription={transcription}
+            finalContent={finalContent}
+            onFinalContentChange={setFinalContent}
+            recipientName={recipientName}
+            onRecipientNameChange={setRecipientName}
             unlockDate={unlockDate}
+            onUnlockDateSelect={setUnlockDate}
             unlockTime={unlockTime}
-            unlockCode={unlockCode || ""}
-            backupShare={backupShare || ""}
-            shareUrl={shareUrl}
-            onGenerateShareLink={handleGenerateShareLink}
-            isGeneratingShareLink={generateShareLinkMutation.isPending}
-            onExportPDF={handleExportPDF}
-            onReset={() => {
-              setStep("template");
-              setSelectedTemplate("");
-              setRecipientName("");
-              setRecipientRelation("");
-              setTranscription("");
-              setAiDraft("");
-              setFinalContent("");
-              setAudioUrl("");
-              setLetterId(null);
-              setUnlockDate(undefined);
-              setUnlockTime("09:00");
-              setShareToken(null);
-              setShareUrl(null);
-              setUnlockCode(null);
-              setBackupShare(null);
-              resetRecording();
-              resetEncryption();
-            }}
+            onUnlockTimeChange={setUnlockTime}
+            reminderEnabled={reminderEnabled}
+            onReminderEnabledChange={setReminderEnabled}
+            reminderDays={reminderDays}
+            onReminderDaysChange={setReminderDays}
+            isEncrypting={isEncrypting}
+            onSave={handleSave}
           />
         )}
-      </main>
-    </div>
+
+
+        {/* 暗号化中 */}
+        {
+          step === "encrypting" && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="max-w-md w-full bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                <div className="w-16 h-16 mx-auto rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
+                  <Lock className="h-8 w-8 text-white animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">暗号化して封緘中...</h3>
+                  <p className="text-sm text-white/50 mb-6">
+                    この処理はあなたの端末内で行われます。<br />
+                    絶対にページを閉じないでください。
+                  </p>
+                  <div className="w-full bg-white/5 rounded-full h-1 overflow-hidden">
+                    <div
+                      className="h-full bg-white transition-all duration-300 ease-out"
+                      style={{ width: `${encryptionProgress}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        {/* 完了（リファクタ版） */}
+        {
+          step === "complete" && (
+            <LetterCompletionView
+              recipientName={recipientName || undefined}
+              templateName={selectedTemplateData?.displayName}
+              unlockDate={unlockDate}
+              unlockTime={unlockTime}
+              unlockCode={unlockCode || ""}
+              backupShare={backupShare || ""}
+              shareUrl={shareUrl}
+              onGenerateShareLink={handleGenerateShareLink}
+              isGeneratingShareLink={generateShareLinkMutation.isPending}
+              onExportPDF={handleExportPDF}
+              onReset={() => {
+                setStep("template");
+                setSelectedTemplate("");
+                setRecipientName("");
+                setRecipientRelation("");
+                setTranscription("");
+                setAiDraft("");
+                setFinalContent("");
+                setAudioUrl("");
+                setLetterId(null);
+                setUnlockDate(undefined);
+                setUnlockTime("09:00");
+                setShareToken(null);
+                setShareUrl(null);
+                setUnlockCode("");
+                setBackupShare("");
+                resetRecording();
+                resetEncryption();
+              }}
+            />
+          )
+        }
+      </main >
+    </div >
   );
 }

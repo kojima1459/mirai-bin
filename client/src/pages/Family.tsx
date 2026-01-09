@@ -37,14 +37,14 @@ export default function Family() {
 
     const { data: membersData, isLoading: membersLoading, refetch: refetchMembers } =
         trpc.family.listMembers.useQuery(
-            { familyId: myFamily?.familyId ?? 0 },
-            { enabled: !!myFamily?.familyId }
+            { familyId: myFamily?.id ?? 0 },
+            { enabled: !!myFamily?.id }
         );
 
     const { data: invitesData, isLoading: invitesLoading, refetch: refetchInvites } =
         trpc.family.listInvites.useQuery(
-            { familyId: myFamily?.familyId ?? 0 },
-            { enabled: !!myFamily?.familyId && myFamily?.role === "owner" }
+            { familyId: myFamily?.id ?? 0 },
+            { enabled: !!myFamily?.id && myFamily?.ownerUserId === user?.id }
         );
 
     // Mutations
@@ -90,14 +90,14 @@ export default function Family() {
             toast.error("メールアドレスを入力してください");
             return;
         }
-        if (!myFamily?.familyId) {
+        if (!myFamily?.id) {
             toast.error("家族グループが見つかりません");
             return;
         }
         setIsInviting(true);
         try {
             await inviteMutation.mutateAsync({
-                familyId: myFamily.familyId,
+                familyId: myFamily.id,
                 email: inviteEmail.trim()
             });
         } finally {
@@ -210,8 +210,8 @@ export default function Family() {
                                         <Users className="h-5 w-5 text-white/60" />
                                     </div>
                                     <div>
-                                        <h2 className="font-semibold tracking-tight">{myFamily.familyName || "家族グループ"}</h2>
-                                        {myFamily.role === "owner" && (
+                                        <h2 className="font-semibold tracking-tight">{myFamily.name || "家族グループ"}</h2>
+                                        {myFamily.ownerUserId === user?.id && (
                                             <span className="inline-flex items-center gap-1 text-[10px] bg-white/10 text-white/60 px-2 py-0.5 rounded-full uppercase tracking-wider mt-1">
                                                 <Crown className="h-3 w-3" />
                                                 オーナー
@@ -255,7 +255,7 @@ export default function Family() {
                             </div>
 
                             {/* Invite (Owner Only) */}
-                            {myFamily.role === "owner" && (
+                            {myFamily.ownerUserId === user?.id && (
                                 <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
                                     <div className="flex items-center gap-2 mb-2">
                                         <UserPlus className="h-4 w-4 text-white/40" />
@@ -300,7 +300,7 @@ export default function Family() {
                             )}
 
                             {/* Pending Invites (Owner Only) */}
-                            {myFamily.role === "owner" && (
+                            {myFamily.ownerUserId === user?.id && (
                                 <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Clock className="h-4 w-4 text-white/40" />
