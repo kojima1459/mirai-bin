@@ -59,6 +59,19 @@ export function useAuth(options?: UseAuthOptions) {
     logoutMutation.isPending,
   ]);
 
+  // Listen for Firebase Auth changes to sync with server session
+  useEffect(() => {
+    // Dynamically import to avoid circular dependencies if any
+    import("@/lib/firebase").then(({ onAuthChange }) => {
+      const unsubscribe = onAuthChange((firebaseUser) => {
+        // If Firebase user state changes, invalidate the server auth query
+        // This ensures the next fetch will use the correct token (or no token)
+        utils.auth.me.invalidate();
+      });
+      return unsubscribe;
+    });
+  }, [utils]);
+
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;
     if (meQuery.isLoading || logoutMutation.isPending) return;

@@ -120,46 +120,6 @@ var init_notification = __esm({
   }
 });
 
-// vite.config.ts
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import path2 from "path";
-import { defineConfig } from "vite";
-var plugins, vite_config_default;
-var init_vite_config = __esm({
-  "vite.config.ts"() {
-    "use strict";
-    plugins = [react(), tailwindcss()];
-    vite_config_default = defineConfig({
-      plugins,
-      resolve: {
-        alias: {
-          "@": path2.resolve(import.meta.dirname, "client", "src"),
-          "@shared": path2.resolve(import.meta.dirname, "shared"),
-          "@assets": path2.resolve(import.meta.dirname, "attached_assets")
-        }
-      },
-      envDir: path2.resolve(import.meta.dirname),
-      root: path2.resolve(import.meta.dirname, "client"),
-      publicDir: path2.resolve(import.meta.dirname, "client", "public"),
-      build: {
-        outDir: path2.resolve(import.meta.dirname, "dist/public"),
-        emptyOutDir: true
-      },
-      server: {
-        host: true,
-        proxy: {
-          // Proxy API requests to the Express server in development
-          "/api": {
-            target: "http://localhost:3000",
-            changeOrigin: true
-          }
-        }
-      }
-    });
-  }
-});
-
 // server/_core/vite.ts
 var vite_exports = {};
 __export(vite_exports, {
@@ -167,7 +127,7 @@ __export(vite_exports, {
 });
 import fs2 from "fs";
 import { nanoid as nanoid2 } from "nanoid";
-import path3 from "path";
+import path2 from "path";
 import { createServer as createViteServer } from "vite";
 async function setupVite(app2, server) {
   const serverOptions = {
@@ -176,8 +136,7 @@ async function setupVite(app2, server) {
     allowedHosts: true
   };
   const vite = await createViteServer({
-    ...vite_config_default,
-    configFile: false,
+    configFile: path2.resolve(import.meta.dirname, "../../vite.config.ts"),
     server: serverOptions,
     appType: "custom"
   });
@@ -185,7 +144,7 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path3.resolve(
+      const clientTemplate = path2.resolve(
         import.meta.dirname,
         "../..",
         "client",
@@ -207,7 +166,6 @@ async function setupVite(app2, server) {
 var init_vite = __esm({
   "server/_core/vite.ts"() {
     "use strict";
-    init_vite_config();
   }
 });
 
