@@ -142,6 +142,22 @@ export async function runReminderBatch(): Promise<BatchResult> {
       }
     }
 
+    // Push通知も送信（購読がある場合）
+    try {
+      const { sendReminderPush } = await import("./_core/push/sendPush");
+      const pushResult = await sendReminderPush(
+        reminder.ownerUserId,
+        reminder.letter.recipientName || "大切な人",
+        reminder.daysBefore,
+        reminder.letterId
+      );
+      if (pushResult.sent > 0) {
+        console.log(`[ReminderBatch] Push sent to ${pushResult.sent} devices for reminder ${reminder.id}`);
+      }
+    } catch (pushErr) {
+      console.warn(`[ReminderBatch] Push failed for reminder ${reminder.id}:`, pushErr);
+    }
+
     if (ownerSent || trustedSent) {
       // 送信済みにマーク（原子的更新）
       const marked = await markReminderAsSent(reminder.id);

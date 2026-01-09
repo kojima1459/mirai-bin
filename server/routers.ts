@@ -960,6 +960,22 @@ export const appRouter = router({
           } catch (emailErr) {
             console.warn("[markOpened] Failed to send open notification email:", emailErr);
           }
+
+          // 3) Push notification to owner (if subscribed)
+          try {
+            const { sendOpenedPush } = await import("./_core/push/sendPush");
+            const recipientLabel = letter.recipientName || "大切な人";
+            const pushResult = await sendOpenedPush(
+              letter.authorId,
+              recipientLabel,
+              letter.id
+            );
+            if (pushResult.sent > 0) {
+              console.log(`[markOpened] Push sent to ${pushResult.sent} devices`);
+            }
+          } catch (pushErr) {
+            console.warn("[markOpened] Failed to send open notification push:", pushErr);
+          }
         }
 
         return {
