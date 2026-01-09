@@ -8,6 +8,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -27,95 +28,89 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 :root {
-  /* 温かみのあるカラーパレット（アンバー・セピア系） */
-  --primary: oklch(0.55 0.12 35);
-  --primary-foreground: oklch(0.98 0.01 80);
-  --sidebar-primary: oklch(0.50 0.10 35);
-  --sidebar-primary-foreground: oklch(0.98 0.01 80);
-  --chart-1: oklch(0.55 0.12 35);
-  --chart-2: oklch(0.65 0.10 60);
-  --chart-3: oklch(0.55 0.08 150);
-  --chart-4: oklch(0.70 0.12 80);
-  --chart-5: oklch(0.60 0.15 320);
-  --radius: 0.75rem;
-  --background: oklch(0.98 0.01 80);
-  --foreground: oklch(0.25 0.02 50);
+  /* Luxury Light (Paper & Ink) */
+  --background: oklch(1 0 0); /* Pure White */
+  --foreground: oklch(0.2 0 0); /* Soft Black #1d1d1f */
+
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.25 0.02 50);
+  --card-foreground: oklch(0.2 0 0);
+
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.02 50);
-  --secondary: oklch(0.94 0.02 80);
-  --secondary-foreground: oklch(0.35 0.03 50);
-  --muted: oklch(0.94 0.02 80);
-  --muted-foreground: oklch(0.5 0.02 50);
-  --accent: oklch(0.90 0.04 60);
-  --accent-foreground: oklch(0.25 0.02 50);
+  --popover-foreground: oklch(0.2 0 0);
+
+  --primary: oklch(0.2 0 0); /* Black Action */
+  --primary-foreground: oklch(1 0 0); /* White Text */
+
+  --secondary: oklch(0.96 0 0); /* #f5f5f7 */
+  --secondary-foreground: oklch(0.2 0 0);
+
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.55 0 0); /* #86868b */
+
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.2 0 0);
+
   --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0.01 80);
-  --border: oklch(0.88 0.02 80);
-  --input: oklch(0.88 0.02 80);
-  --ring: oklch(0.55 0.12 35);
-  --sidebar: oklch(0.96 0.01 80);
-  --sidebar-foreground: oklch(0.25 0.02 50);
-  --sidebar-accent: oklch(0.92 0.03 80);
-  --sidebar-accent-foreground: oklch(0.25 0.02 50);
-  --sidebar-border: oklch(0.88 0.02 80);
-  --sidebar-ring: oklch(0.55 0.12 35);
-  
-  /* フォント */
-  --font-sans: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
-  --font-serif: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.2 0 0);
+
+  --radius: 1rem; /* 16px */
+
+  /* Charts - kept but desaturated */
+  --chart-1: oklch(0.2 0 0);
+  --chart-2: oklch(0.4 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.8 0 0);
+  --chart-5: oklch(0.9 0 0);
+
+  /* Fonts */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-serif: "Times New Roman", Times, serif;
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* Luxury Dark (Quiet Black) */
+  --background: oklch(0.02 0 0); /* #050505 approx */
+  --foreground: oklch(0.96 0 0); /* #f5f5f7 approx */
+
+  --card: oklch(0.12 0 0); /* #1c1c1e */
+  --card-foreground: oklch(0.96 0 0);
+
+  --popover: oklch(0.12 0 0);
+  --popover-foreground: oklch(0.96 0 0);
+
+  --primary: oklch(0.98 0 0); /* White Action */
+  --primary-foreground: oklch(0.05 0 0); /* Black Text */
+
+  --secondary: oklch(0.18 0 0);
+  --secondary-foreground: oklch(0.98 0 0);
+
+  --muted: oklch(0.18 0 0);
+  --muted-foreground: oklch(0.65 0 0); /* #a1a1a6 */
+
+  --accent: oklch(0.18 0 0);
+  --accent-foreground: oklch(0.98 0 0);
+
+  --destructive: oklch(0.4 0.15 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.2 0 0); /* Subtle */
+  --input: oklch(0.2 0 0);
+  --ring: oklch(0.98 0 0);
+
+  --chart-1: oklch(0.98 0 0);
+  --chart-2: oklch(0.8 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.4 0 0);
+  --chart-5: oklch(0.2 0 0);
 }
 
 @layer base {
@@ -151,7 +146,8 @@
 
 /* 録音ボタンのパルスアニメーション */
 @keyframes recording-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
@@ -167,7 +163,8 @@
 
 /* 波形アニメーション */
 @keyframes wave {
-  0%, 100% {
+  0%,
+  100% {
     transform: scaleY(0.5);
   }
   50% {
@@ -240,11 +237,11 @@
 
 /* モバイル最適化: スクロールバー非表示ユーティリティ */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 .scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari and Opera */
+  display: none; /* Chrome, Safari and Opera */
 }
 
 /* モバイル最適化: line-clampユーティリティ */

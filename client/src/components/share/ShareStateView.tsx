@@ -31,104 +31,107 @@ export function ShareStateView({ state, unlockAt, onRetry }: ShareStateViewProps
 
     const config = {
         TOKEN_NOT_FOUND: {
-            icon: <HelpCircle className="h-12 w-12 text-muted-foreground" />,
+            icon: <HelpCircle className="h-10 w-10" />,
             title: "リンクが見つかりません",
             body: "URLが間違っているか、既に無効になっています。",
             action: (
-                <div className="flex flex-col gap-2 w-full">
+                <div className="flex flex-col gap-3 w-full">
                     <Button variant="outline" onClick={handleContactSender}>送信者に確認する</Button>
                     <Button variant="ghost" onClick={onRetry}>もう一度読み込む</Button>
                 </div>
             )
         },
         TOKEN_CANCELED: {
-            icon: <Ban className="h-12 w-12 text-destructive" />,
-            title: "この手紙は取り消されました",
-            body: "送信者が送信を取り消しています。",
+            icon: <Ban className="h-10 w-10" />, // Removed text-destructive for monochrome look
+            title: "取り消されました",
+            body: "この手紙の送信は取り消されています。",
             action: <Button variant="outline" onClick={handleContactSender}>送信者に確認する</Button>
         },
         TOKEN_REVOKED: {
-            icon: <FileWarning className="h-12 w-12 text-amber-500" />,
-            title: "このリンクは無効になっています",
+            icon: <FileWarning className="h-10 w-10" />,
+            title: "リンク無効",
             body: "安全のため、このリンクは無効化されました。",
             action: <Button variant="outline" onClick={handleContactSender}>送信者に確認する</Button>
         },
         TOKEN_ROTATED: {
-            icon: <RefreshCw className="h-12 w-12 text-blue-500" />,
-            title: "リンクが更新されています",
+            icon: <RefreshCw className="h-10 w-10" />,
+            title: "リンク更新済み",
             body: "新しいリンクが発行されている可能性があります。",
             action: <Button variant="outline" onClick={handleContactSender}>送信者に確認する</Button>
         },
         NOT_YET_OPENABLE: {
-            icon: <Clock className="h-12 w-12 text-primary" />,
+            icon: <Clock className="h-10 w-10" />,
             title: "まだ開封できません",
             body: (
-                <div className="space-y-4">
-                    <p>開封できる日になったら、ここから開けられます。</p>
+                <div className="space-y-6">
+                    <p className="text-sm">その瞬間が来るまで、<br />大切にお預かりしています。</p>
                     {unlockAt && (
-                        <div className="bg-muted p-4 rounded-lg text-center">
-                            <div className="text-xl font-bold">{formatUnlockDateJST(unlockAt)}</div>
-                            <div className="text-sm text-muted-foreground mt-1">{getRelativeTimeJST(unlockAt)}</div>
+                        <div className="bg-secondary/30 py-6 px-4 rounded-xl text-center border border-border/50">
+                            <span className="text-xs font-bold tracking-widest uppercase text-muted-foreground block mb-2">Unlock Date</span>
+                            <div className="text-2xl font-bold tracking-tight font-mono">{formatUnlockDateJST(unlockAt)}</div>
+                            <div className="text-sm text-foreground/60 mt-2 font-medium">{getRelativeTimeJST(unlockAt)}</div>
                         </div>
                     )}
                 </div>
             ),
             action: (
-                <div className="flex flex-col gap-2 w-full">
-                    <Button onClick={handleCopyUrl}>URLをコピーして保存</Button>
+                <div className="flex flex-col gap-3 w-full">
+                    <Button onClick={handleCopyUrl} className="w-full">URLを保存する</Button>
                     <Button variant="ghost" onClick={onRetry}>再読み込み</Button>
                 </div>
             )
         },
         ALREADY_OPENED: {
-            icon: <Lock className="h-12 w-12 text-green-600" />,
-            title: "この手紙は既に開封されています",
-            body: "同じリンクからはもう一度開けない仕様です。",
+            icon: <Lock className="h-10 w-10" />,
+            title: "開封済みです",
+            body: "セキュリティ保護のため、同じURLからは一度しかアクセスできません。",
             action: <Button variant="outline" onClick={handleContactSender}>送信者に確認する</Button>
         },
         CODE_INVALID: {
-            icon: <AlertCircle className="h-12 w-12 text-destructive" />,
-            title: "解錠コードが違うようです",
-            body: "もう一度、12文字のコードを確認して入力してください。",
-            action: <Button variant="outline" onClick={onRetry}>再入力</Button>
+            icon: <AlertCircle className="h-10 w-10" />,
+            title: "認証失敗",
+            body: "解錠コードが正しくありません。<br/>12文字のコードをご確認ください。",
+            action: <Button onClick={onRetry} className="w-full">再入力する</Button>
         },
         NETWORK_OR_UNKNOWN: {
-            icon: <AlertCircle className="h-12 w-12 text-destructive" />,
-            title: "読み込みに失敗しました",
+            icon: <AlertCircle className="h-10 w-10" />,
+            title: "読み込みエラー",
             body: "通信状況を確認して、もう一度お試しください。",
             action: <Button onClick={onRetry}>再読み込み</Button>
         },
-        READY_TO_UNLOCK: { icon: null, title: "", body: null, action: null } // Handled separately
+        READY_TO_UNLOCK: { icon: null, title: "", body: null, action: null }
     }[state];
 
-    // Fallback if config is missing (Ready to unlock normally doesn't use this view)
     if (!config || state === "READY_TO_UNLOCK") return null;
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-            <Card className="max-w-md w-full text-center">
-                <CardHeader className="flex flex-col items-center gap-4 pb-2">
-                    <div className="bg-muted/30 p-4 rounded-full">
+        <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+            <div className="w-full max-w-sm mx-auto text-center space-y-8">
+                <div className="flex justify-center">
+                    <div className="w-20 h-20 rounded-full bg-secondary text-foreground flex items-center justify-center">
                         {config.icon}
                     </div>
-                    <CardTitle className="text-xl">{config.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-muted-foreground">
+                </div>
+
+                <div className="space-y-3">
+                    <h1 className="text-2xl font-bold tracking-tight">{config.title}</h1>
+                    <div className="text-muted-foreground leading-relaxed text-sm">
                         {config.body}
                     </div>
-                </CardContent>
-                <CardFooter className="flex flex-col gap-3 pt-2">
+                </div>
+
+                <div className="pt-4 space-y-4">
                     {config.action}
-                    <div className="pt-4">
+
+                    <div className="pt-8">
                         <Link href="/">
-                            <Button variant="link" size="sm" className="text-muted-foreground">
-                                Homeへ戻る
-                            </Button>
+                            <span className="text-xs text-muted-foreground/60 hover:text-foreground cursor-pointer transition-colors border-b border-transparent hover:border-foreground/20 pb-0.5">
+                                mirai-bin Top
+                            </span>
                         </Link>
                     </div>
-                </CardFooter>
-            </Card>
+                </div>
+            </div>
         </div>
     );
 }
