@@ -8,7 +8,7 @@ import {
   School, BookOpen, Star, Briefcase, Baby, HandHeart, FileEdit,
   Shield, Lock, FileCheck, Settings, ChevronDown, Sparkles,
   Sun, Wallet, Map, CloudRain, Frown, Angry, Users, ThumbsDown,
-  BatteryLow, DoorOpen, Compass, Search
+  BatteryLow, DoorOpen, Compass, Search, Mic, Send
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -56,36 +56,6 @@ const iconMap: Record<string, React.ReactNode> = {
   compass: <Compass className="h-5 w-5" />,
 };
 
-// カテゴリの色設定
-const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
-  emotion: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
-  "parent-truth": { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  ritual: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
-  milestone: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
-};
-
-const categoryLabels: Record<string, string> = {
-  emotion: "感情サポート",
-  "parent-truth": "親の本音",
-  ritual: "未来の儀式",
-  milestone: "人生の節目",
-};
-
-// アニメーション設定
-const fadeInUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6 }
-};
-
-const staggerContainer = {
-  animate: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const { signIn } = useClientAuth();
@@ -120,28 +90,16 @@ export default function Home() {
     });
   }, [templates, searchQuery, selectedCategory]);
 
-  // カテゴリ別にグループ化
-  const groupedTemplates = useMemo(() => {
-    const groups: Record<string, typeof filteredTemplates> = {};
-    filteredTemplates.forEach(t => {
-      const cat = t.category || "milestone";
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(t);
-    });
-    return groups;
-  }, [filteredTemplates]);
-
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50">
+      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
           className="text-center"
         >
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">読み込み中...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-white/20 mx-auto mb-4" />
         </motion.div>
       </div>
     );
@@ -157,62 +115,53 @@ export default function Home() {
     }
   };
 
-  // テンプレートアコーディオンアイテム
+  // テンプレートアコーディオンアイテム - LPスタイル
   const TemplateAccordionItem = ({ template, isRecommended = false }: {
     template: NonNullable<typeof templates>[number];
     isRecommended?: boolean;
   }) => {
-    const colors = categoryColors[template.category || "milestone"] || categoryColors.milestone;
     const recordingGuide = parseRecordingGuide(template.recordingGuide);
 
     return (
       <AccordionItem
         value={template.name}
-        className={`border rounded-lg mb-3 ${colors.border} ${colors.bg} overflow-hidden`}
+        className="border-b border-white/5 py-2 last:border-0"
       >
-        {/* モバイル最適化: タップ領域で44px以上、パディング拡大 */}
-        <AccordionTrigger className="px-4 py-4 md:py-3 hover:no-underline hover:bg-white/50 transition-colors min-h-[56px] md:min-h-[48px]">
-          <div className="flex items-center gap-3 flex-1 text-left">
-            {/* アイコン: モバイルで少し大きく */}
-            <div className={`w-11 h-11 md:w-10 md:h-10 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 border ${colors.border}`}>
-              {iconMap[template.icon || ""] || <Mail className="h-5 w-5" />}
+        <AccordionTrigger className="px-0 py-4 hover:no-underline group">
+          <div className="flex items-center gap-4 flex-1 text-left">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 group-hover:border-white/20 group-hover:bg-white/10 transition-colors">
+              {iconMap[template.icon || ""] || <Mail className="h-5 w-5 text-white/80" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* タイトル: モバイルで読みやすいサイズ */}
-                <span className="font-semibold text-foreground text-base md:text-sm">{template.displayName}</span>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="font-semibold text-white tracking-tight">{template.displayName}</span>
                 {isRecommended && (
-                  <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-xs">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/60 uppercase tracking-wider font-medium">
                     おすすめ
-                  </Badge>
+                  </span>
                 )}
               </div>
-              {/* 説明: モバイルでは2行まで表示 */}
-              <p className="text-sm text-muted-foreground line-clamp-2 md:truncate">
+              <p className="text-sm text-white/50 line-clamp-1">
                 {template.subtitle || template.description}
               </p>
             </div>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-4 pb-4">
-          {/* モバイル最適化: パディング調整 */}
-          <div className="bg-white/70 rounded-lg p-4 md:p-4 space-y-4">
-            {/* 録音ガイド（90秒で話す順番） */}
+        <AccordionContent className="pb-6">
+          <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-5">
+            {/* 録音ガイド */}
             {recordingGuide.length > 0 && (
               <div>
-                {/* モバイル最適化: 見出しサイズ調整 */}
-                <h4 className="text-base md:text-sm font-semibold text-foreground mb-3 md:mb-2">
-                  📝 90秒で話す順番
+                <h4 className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase mb-4">
+                  録音ガイド
                 </h4>
-                {/* モバイル最適化: ステップ間隔拡大 */}
-                <ol className="space-y-2.5 md:space-y-1.5">
+                <ol className="space-y-3">
                   {recordingGuide.map((step, i) => (
-                    <li key={i} className="text-sm md:text-sm text-muted-foreground flex items-start gap-2.5 md:gap-2">
-                      {/* モバイル最適化: 番号バッジ少し大きく */}
-                      <span className={`w-6 h-6 md:w-5 md:h-5 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center shrink-0 text-xs font-medium`}>
+                    <li key={i} className="text-sm text-white/70 flex items-start gap-3">
+                      <span className="w-6 h-6 rounded-full bg-white/10 text-white/60 flex items-center justify-center shrink-0 text-xs font-medium">
                         {i + 1}
                       </span>
-                      <span className="leading-relaxed">{step}</span>
+                      <span className="leading-relaxed pt-0.5">{step}</span>
                     </li>
                   ))}
                 </ol>
@@ -221,282 +170,248 @@ export default function Home() {
 
             {/* 一言例 */}
             {template.exampleOneLiner && (
-              <div className="border-l-2 border-amber-300 pl-3 py-2 md:py-1">
-                {/* モバイル最適化: 読みやすいサイズ */}
-                <p className="text-sm md:text-sm italic text-muted-foreground leading-relaxed">
+              <div className="border-l-2 border-white/20 pl-4 py-1">
+                <p className="text-sm italic text-white/50 leading-relaxed">
                   「{template.exampleOneLiner}」
                 </p>
               </div>
             )}
 
-            {/* CTAボタン - モバイル最適化: タップしやすいサイズ */}
-            <div className="pt-3 md:pt-2">
+            {/* CTAボタン */}
+            <div className="pt-2">
               {isAuthenticated ? (
                 <Link href={`/create?template=${template.name}`}>
-                  <Button className="w-full h-12 md:h-10 text-base md:text-sm">
-                    <PenLine className="mr-2 h-5 w-5 md:h-4 md:w-4" />
-                    このテンプレートで手紙を書く
+                  <Button className="w-full bg-white text-black hover:bg-white/90 rounded-full h-12 font-semibold">
+                    <PenLine className="mr-2 h-4 w-4" />
+                    このテーマで手紙を書く
                   </Button>
                 </Link>
               ) : (
-                <Button onClick={handleLogin} className="w-full h-12 md:h-10 text-base md:text-sm">
+                <Button onClick={handleLogin} className="w-full bg-white text-black hover:bg-white/90 rounded-full h-12 font-semibold">
                   ログインして手紙を書く
                 </Button>
               )}
             </div>
           </div>
         </AccordionContent>
-      </AccordionItem >
+      </AccordionItem>
     );
   };
 
   return (
-    <div className="min-h-screen">
-      {/* ヘッダー */}
-      <motion.header
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="border-b bg-card/80 backdrop-blur-md sticky top-0 z-50"
-      >
-        <div className="container flex h-16 items-center justify-between">
-          <Link href="/">
-            <motion.div
-              className="flex items-center gap-2 cursor-pointer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Mail className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                未来便
-              </span>
-            </motion.div>
-          </Link>
-          <div className="flex items-center gap-4">
-            {isAuthenticated ? (
-              <>
-                <Link href="/drafts">
-                  <Button variant="ghost" size="sm">
-                    <FileEdit className="h-4 w-4 mr-1" />
-                    下書き
-                  </Button>
-                </Link>
-                <Link href="/my-letters">
-                  <Button variant="ghost">マイレター</Button>
-                </Link>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-1">
-                      {user?.name || "ゲスト"}
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <Link href="/settings">
-                      <DropdownMenuItem className="cursor-pointer">
-                        <Settings className="h-4 w-4 mr-2" />
-                        設定
-                      </DropdownMenuItem>
-                    </Link>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-muted-foreground text-xs" disabled>
-                      {user?.email}
+    <div className="min-h-screen bg-[#050505] text-white selection:bg-white/30 selection:text-white font-sans antialiased">
+      {/* Background Grain Texture */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+      </div>
+
+      {/* ヘッダー - LP style */}
+      <header className="fixed top-0 w-full z-50 mix-blend-difference px-6 py-6 md:px-12 flex justify-between items-center">
+        <Link href="/">
+          <div className="text-xl font-bold tracking-tighter cursor-pointer">mirai-bin</div>
+        </Link>
+        <nav className="flex gap-6 items-center text-sm font-medium">
+          {isAuthenticated ? (
+            <>
+              <Link href="/drafts">
+                <span className="cursor-pointer hover:opacity-70 transition-opacity hidden md:inline">下書き</span>
+              </Link>
+              <Link href="/my-letters">
+                <span className="cursor-pointer hover:opacity-70 transition-opacity">マイレター</span>
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="cursor-pointer hover:opacity-70 transition-opacity flex items-center gap-1">
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-[#0a0a0a] border-white/10">
+                  <Link href="/settings">
+                    <DropdownMenuItem className="cursor-pointer text-white hover:bg-white/5">
+                      設定
                     </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            ) : (
-              <Button onClick={handleLogin}>ログイン</Button>
-            )}
-          </div>
+                  </Link>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  <DropdownMenuItem className="text-white/50 text-xs" disabled>
+                    {user?.email}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <span className="cursor-pointer hover:opacity-70 transition-opacity">Login</span>
+              </Link>
+              <Link href="/create">
+                <span className="cursor-pointer bg-white text-black px-4 py-2 rounded-full hover:bg-white/90 transition-colors">Start</span>
+              </Link>
+            </>
+          )}
+        </nav>
+      </header>
+
+      {/* ヒーローセクション - LP style */}
+      <section className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden px-6">
+        {/* Background Ambience */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-purple-900/10 blur-[120px] rounded-full mix-blend-screen" />
+          <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-900/10 blur-[120px] rounded-full mix-blend-screen" />
         </div>
-      </motion.header >
 
-      {/* ヒーローセクション */}
-      < section className="py-20 md:py-32 relative overflow-hidden" >
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50" />
-        <motion.div
-          className="absolute inset-0 opacity-30"
-          animate={{
-            background: [
-              "radial-gradient(circle at 20% 50%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)",
-              "radial-gradient(circle at 80% 50%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)",
-              "radial-gradient(circle at 20% 50%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)",
-            ]
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-
-        <div className="container text-center relative z-10">
+        <div className="relative z-10 max-w-4xl mx-auto text-center space-y-12">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="space-y-6"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-              className="inline-block mb-6"
-            >
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto shadow-lg shadow-orange-200">
-                <Mail className="h-10 w-10 text-white" />
-              </div>
-            </motion.div>
-
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-              <motion.span
-                className="text-primary inline-block"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                未来
-              </motion.span>
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-              >
-                の大切な人へ
-              </motion.span>
-              <br />
-              <motion.span
-                className="text-primary inline-block"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 }}
-              >
-                今
-              </motion.span>
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-              >
-                の想いを届ける
-              </motion.span>
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tighter leading-tight bg-clip-text text-transparent bg-gradient-to-b from-white to-white/70">
+              未来へ、封をする。
             </h1>
-
-            <motion.p
-              className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.7 }}
-            >
-              90秒の音声録音から、AIが温かい手紙を作成。
-              <br />
-              暗号化して安全に保管し、未来の特別な日に届けます。
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-            >
-              {isAuthenticated ? (
-                <Link href="/create">
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button size="lg" className="text-lg px-8 py-6 shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-shadow">
-                      <PenLine className="mr-2 h-5 w-5" />
-                      手紙を書く
-                    </Button>
-                  </motion.div>
-                </Link>
-              ) : (
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button onClick={handleLogin} size="lg" className="text-lg px-8 py-6 shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-shadow">
-                    はじめる
-                  </Button>
-                </motion.div>
-              )}
-            </motion.div>
+            <p className="text-lg md:text-xl text-white/60 font-medium tracking-wide max-w-xl mx-auto leading-relaxed">
+              今の声と想いを、デジタルな手紙に。<br className="hidden md:block" />
+              誰にも読まれない、あなたと大切な人だけのタイムカプセル。
+            </p>
           </motion.div>
-        </div >
-      </section >
 
-      {/* 使い方セクション */}
-      < section className="py-16 bg-card" >
-        <div className="container">
-          <motion.h2
-            className="text-2xl md:text-3xl font-bold text-center mb-12"
-            {...fadeInUp}
-            viewport={{ once: true }}
-            whileInView="animate"
-            initial="initial"
-          >
-            3分で想いを残す
-          </motion.h2>
           <motion.div
-            className="grid md:grid-cols-4 gap-8 max-w-4xl mx-auto"
-            variants={staggerContainer}
-            initial="initial"
-            whileInView="animate"
-            viewport={{ once: true }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            {[
-              { step: "1", title: "テンプレートを選ぶ", desc: "人生の節目に合わせて", icon: "📋" },
-              { step: "2", title: "90秒で話す", desc: "思いつくままに", icon: "🎤" },
-              { step: "3", title: "AIが手紙に", desc: "温かい文章に変換", icon: "✨" },
-              { step: "4", title: "暗号化して保存", desc: "安全に未来へ届ける", icon: "🔐" },
-            ].map((item, index) => (
-              <motion.div
-                key={item.step}
-                className="text-center"
-                variants={fadeInUp}
-                custom={index}
-              >
-                <motion.div
-                  className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-2xl font-bold mx-auto mb-4 shadow-md"
-                  whileHover={{ scale: 1.1, rotate: 5 }}
-                  transition={{ type: "spring", stiffness: 300 }}
+            {isAuthenticated ? (
+              <Link href="/create">
+                <Button
+                  size="lg"
+                  className="px-8 py-6 text-base rounded-full bg-white text-black hover:bg-white/90 hover:scale-[1.02] transition-all duration-300 font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]"
                 >
-                  {item.icon}
-                </motion.div>
-                <h3 className="font-semibold mb-2">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
-              </motion.div>
+                  今すぐ手紙を作る
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                onClick={handleLogin}
+                size="lg"
+                className="px-8 py-6 text-base rounded-full bg-white text-black hover:bg-white/90 hover:scale-[1.02] transition-all duration-300 font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+              >
+                今すぐ手紙を作る
+              </Button>
+            )}
+            <span className="text-sm text-white/40">登録不要で試せます</span>
+          </motion.div>
+
+          {/* Abstract Visual (CSS Audio Wave) */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6, duration: 1 }}
+            className="pt-16 flex items-center justify-center gap-1.5 h-16"
+          >
+            {[...Array(20)].map((_, i) => (
+              <motion.div
+                key={i}
+                className="w-1 bg-gradient-to-t from-white/10 to-white/50 rounded-full"
+                animate={{
+                  height: [16, Math.random() * 48 + 16, 16],
+                  opacity: [0.3, 0.8, 0.3]
+                }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  delay: i * 0.05
+                }}
+                style={{ width: '2px' }}
+              />
             ))}
           </motion.div>
         </div>
-      </section >
+      </section>
 
-      {/* テンプレートセクション（アコーディオン形式） */}
-      < section className="py-16" >
-        <div className="container max-w-3xl">
+      {/* 使い方セクション - LP style */}
+      <section className="py-32 px-6 border-t border-white/5">
+        <div className="max-w-6xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-8"
+            className="text-center mb-24"
           >
-            <h2 className="text-2xl md:text-3xl font-bold mb-4">
-              テンプレートを選ぶ
+            <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase mb-4 block">Process</span>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">想いを届ける、<br />最もシンプルな方法。</h2>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-12 relative">
+            {[
+              { icon: Mic, title: "声を吹き込む", desc: "最大90秒のメッセージと、\nテキストで想いを綴ります。" },
+              { icon: Lock, title: "未来を指定して封緘", desc: "明日でも、10年後でも。\nその時が来るまで、誰も開けません。" },
+              { icon: Send, title: "URLを共有", desc: "発行されたリンクと解錠コードを\n大切な人に渡すだけ。" }
+            ].map((step, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.2, duration: 0.6 }}
+                className="relative flex flex-col items-center text-center space-y-6 group"
+              >
+                <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-white/20 group-hover:bg-white/10 transition-colors duration-500">
+                  <step.icon strokeWidth={1} className="w-8 h-8 text-white/80" />
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-xl font-semibold tracking-tight">{step.title}</h3>
+                  <p className="text-sm text-white/50 leading-loose whitespace-pre-wrap">{step.desc}</p>
+                </div>
+
+                {idx !== 2 && (
+                  <div className="hidden md:block absolute top-10 left-[calc(50%+40px)] w-[calc(100%-80px)] h-[1px] bg-gradient-to-r from-white/10 to-transparent" />
+                )}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* テンプレートセクション（アコーディオン形式） - LP style */}
+      <section className="py-32 px-6">
+        <div className="max-w-3xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase mb-4 block">Templates</span>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
+              テーマを選ぶ
             </h2>
-            <p className="text-muted-foreground">
-              子どもの人生の節目に届ける、親からの想い
+            <p className="text-white/50">
+              人生の節目に届ける、想いのきっかけ
             </p>
           </motion.div>
 
           {templatesLoading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <Loader2 className="h-8 w-8 animate-spin text-white/20" />
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* おすすめ3選 */}
+            <div className="space-y-12">
+              {/* おすすめ */}
               {recommendedTemplates.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                 >
-                  <div className="flex items-center gap-2 mb-4">
-                    <Star className="h-5 w-5 text-amber-500" />
-                    <h3 className="font-semibold text-lg">おすすめ</h3>
+                  <div className="flex items-center gap-2 mb-6">
+                    <Star className="h-4 w-4 text-white/40" />
+                    <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase">Recommended</span>
                   </div>
-                  <Accordion type="single" collapsible className="space-y-0">
+                  <Accordion type="single" collapsible>
                     {recommendedTemplates.map(template => (
                       <TemplateAccordionItem
                         key={template.id}
@@ -508,234 +423,144 @@ export default function Home() {
                 </motion.div>
               )}
 
-              {/* 検索・フィルター */}
+              {/* 検索 */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="space-y-4"
               >
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="font-semibold text-lg">すべてのテンプレート</span>
-                  <Badge variant="outline">{filteredTemplates.length}件</Badge>
-                </div>
-
-                {/* 検索ボックス - モバイル最適化: タップしやすい高さ */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 md:h-4 md:w-4 text-muted-foreground" />
+                <div className="relative mb-6">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
                   <Input
                     placeholder="テンプレートを検索..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-11 md:pl-10 h-12 md:h-10 text-base md:text-sm"
+                    className="pl-12 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-white/20 rounded-xl"
                   />
                 </div>
 
-                {/* カテゴリフィルター - モバイル最適化: 横スクロール可能 */}
-                <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible scrollbar-hide">
-                  <Button
-                    variant={selectedCategory === null ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSelectedCategory(null)}
-                    className="shrink-0 h-10 md:h-8 px-4 md:px-3 text-sm"
-                  >
-                    すべて
-                  </Button>
-                  {Object.entries(categoryLabels).map(([key, label]) => {
-                    const colors = categoryColors[key];
-                    return (
-                      <Button
-                        key={key}
-                        variant={selectedCategory === key ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setSelectedCategory(selectedCategory === key ? null : key)}
-                        className={`shrink-0 h-10 md:h-8 px-4 md:px-3 text-sm ${selectedCategory !== key ? `${colors.bg} ${colors.text} border ${colors.border} hover:${colors.bg}` : ""}`}
-                      >
-                        {label}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </motion.div>
+                <Accordion type="single" collapsible>
+                  {filteredTemplates.filter(t => !t.isRecommended).map(template => (
+                    <TemplateAccordionItem
+                      key={template.id}
+                      template={template}
+                    />
+                  ))}
+                </Accordion>
 
-              {/* カテゴリ別テンプレート一覧 */}
-              {Object.entries(groupedTemplates).map(([category, categoryTemplates]) => (
-                <motion.div
-                  key={category}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Badge className={`${categoryColors[category]?.bg} ${categoryColors[category]?.text} border ${categoryColors[category]?.border}`}>
-                      {categoryLabels[category] || category}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">{categoryTemplates.length}件</span>
+                {filteredTemplates.length === 0 && (
+                  <div className="text-center py-12 text-white/40">
+                    <p>該当するテンプレートが見つかりませんでした</p>
                   </div>
-                  <Accordion type="single" collapsible className="space-y-0">
-                    {categoryTemplates.map(template => (
-                      <TemplateAccordionItem
-                        key={template.id}
-                        template={template}
-                      />
-                    ))}
-                  </Accordion>
-                </motion.div>
-              ))}
-
-              {/* 検索結果なし */}
-              {filteredTemplates.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <p>該当するテンプレートが見つかりませんでした</p>
-                </div>
-              )}
+                )}
+              </motion.div>
             </div>
           )}
         </div>
-      </section >
+      </section>
 
-      {/* メッセージセクション */}
-      < section className="py-16 bg-gradient-to-br from-amber-50 to-orange-50 relative overflow-hidden" >
-        <motion.div
-          className="absolute inset-0 opacity-20"
-          animate={{
-            background: [
-              "radial-gradient(circle at 30% 70%, rgba(251, 191, 36, 0.4) 0%, transparent 50%)",
-              "radial-gradient(circle at 70% 30%, rgba(251, 191, 36, 0.4) 0%, transparent 50%)",
-              "radial-gradient(circle at 30% 70%, rgba(251, 191, 36, 0.4) 0%, transparent 50%)",
-            ]
-          }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <div className="container max-w-3xl text-center relative z-10">
+      {/* セキュリティセクション - LP style */}
+      <section className="py-32 px-6">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, x: -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
+            className="space-y-8"
           >
-            <h2 className="text-2xl md:text-3xl font-bold mb-6">
-              想いは、時を超えて届く
+            <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase block">Security</span>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-tight">
+              誰も読めない。<br />
+              だから、<br />
+              本当のことが書ける。
             </h2>
-            <p className="text-muted-foreground leading-relaxed mb-8">
-              子どもの成長を見届けられない日が来るかもしれない。
-              <br />
-              でも、あなたの想いは永遠に残ります。
-              <br />
-              <br />
-              10歳の誕生日に、卒業式の朝に、結婚する日に。
-              <br />
-              子どもが人生の節目を迎えるとき、
-              <br />
-              あなたの声が、あなたの言葉が、そばにいます。
+            <p className="text-lg text-white/60 leading-relaxed font-light">
+              封緘（暗号化）された手紙は、運営者であっても内容を見ることはできません。
+              未来のその瞬間に、解錠コードを持つ受取人だけが開封できます。
             </p>
-            {isAuthenticated ? (
-              <Link href="/create">
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button size="lg" className="shadow-lg shadow-orange-200">
-                    <PenLine className="mr-2 h-5 w-5" />
-                    想いを残す
-                  </Button>
-                </motion.div>
-              </Link>
-            ) : (
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button onClick={handleLogin} size="lg" className="shadow-lg shadow-orange-200">
-                  はじめる
-                </Button>
-              </motion.div>
-            )}
           </motion.div>
-        </div >
-      </section >
 
-      {/* セキュリティセクション */}
-      < section className="py-16 bg-card" >
-        <div className="container max-w-4xl">
-          <motion.h2
-            className="text-2xl md:text-3xl font-bold text-center mb-12"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            安全に、確実に届ける
-          </motion.h2>
-          <motion.div
-            className="grid md:grid-cols-3 gap-8"
-            variants={staggerContainer}
-            initial="initial"
-            whileInView="animate"
-            viewport={{ once: true }}
-          >
+          <div className="space-y-4">
             {[
-              {
-                icon: <Shield className="h-8 w-8" />,
-                title: "AES-256暗号化",
-                desc: "軍事レベルの暗号化であなたの想いを守ります"
-              },
-              {
-                icon: <Lock className="h-8 w-8" />,
-                title: "クライアント側暗号化",
-                desc: "サーバーでも読めない完全なプライバシー"
-              },
-              {
-                icon: <FileCheck className="h-8 w-8" />,
-                title: "SHA-256証跡",
-                desc: "改ざん検知で真正性を保証"
-              },
-            ].map((item, index) => (
+              { icon: Shield, title: "ゼロ知識証明", desc: "本文は端末内で暗号化され、サーバーには乱数として保存されます。" },
+              { icon: FileCheck, title: "鍵の分散管理", desc: "開封には「共有リンク」と「解錠コード」の両方が必要です。" },
+              { icon: Lock, title: "厳格な時限ロック", desc: "指定された日時より1秒でも早い開封は、システム的に不可能です。" }
+            ].map((item, idx) => (
               <motion.div
-                key={item.title}
-                className="text-center p-6 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50"
-                variants={fadeInUp}
-                custom={index}
-                whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(251, 191, 36, 0.2)" }}
+                key={idx}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2 + idx * 0.1, duration: 0.5 }}
+                className="group p-6 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
               >
-                <motion.div
-                  className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  {item.icon}
-                </motion.div>
-                <h3 className="font-semibold mb-2">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
+                <div className="flex items-start gap-5">
+                  <div className="mt-1">
+                    <item.icon className="w-5 h-5 text-white/70" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-white mb-2">{item.title}</h3>
+                    <p className="text-sm text-white/50 leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
         </div>
-      </section >
+      </section>
 
-      {/* フッター */}
-      < footer className="py-8 border-t bg-card/50" >
-        <div className="container text-center text-sm text-muted-foreground">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-          >
-            <p>© 2025 未来便（Mirai-bin）</p>
-            <p className="mt-2">大切な想いを、未来へ届ける</p>
-            <div className="mt-4 flex justify-center gap-4 flex-wrap">
-              <Link href="/how-to-use" className="hover:text-primary transition-colors">
-                使い方
-              </Link>
-              <span>・</span>
-              <Link href="/faq" className="hover:text-primary transition-colors">
-                注意点・FAQ
-              </Link>
-              <span>・</span>
-              <Link href="/privacy" className="hover:text-primary transition-colors">
-                プライバシーポリシー
-              </Link>
-              <span>・</span>
-              <Link href="/terms" className="hover:text-primary transition-colors">
-                利用規約
-              </Link>
+      {/* Final CTA - LP style */}
+      <section className="py-32 text-center px-6 border-t border-white/5">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="max-w-xl mx-auto space-y-8"
+        >
+          <p className="text-2xl md:text-3xl font-semibold tracking-tight leading-relaxed">
+            今日、あなたの声を残しませんか。
+          </p>
+          <p className="text-white/50 leading-relaxed">
+            封印した言葉は、未来のその瞬間まで静かに待ちます。<br />
+            開けられる日が来たとき、きっとあなたの想いが届きます。
+          </p>
+          {isAuthenticated ? (
+            <Link href="/create">
+              <Button
+                size="lg"
+                className="px-8 py-6 text-base rounded-full bg-white text-black hover:bg-white/90 hover:scale-[1.02] transition-all duration-300 font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+              >
+                手紙を書き始める
+              </Button>
+            </Link>
+          ) : (
+            <Button
+              onClick={handleLogin}
+              size="lg"
+              className="px-8 py-6 text-base rounded-full bg-white text-black hover:bg-white/90 hover:scale-[1.02] transition-all duration-300 font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+            >
+              はじめる
+            </Button>
+          )}
+        </motion.div>
+      </section>
+
+      {/* フッター - LP style */}
+      <footer className="py-12 text-center border-t border-white/5 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-sm text-white/40 space-y-4">
+            <div className="flex justify-center gap-6 flex-wrap">
+              <Link href="/lp" className="hover:text-white transition-colors">About</Link>
+              <Link href="/how-to-use" className="hover:text-white transition-colors">使い方</Link>
+              <Link href="/faq" className="hover:text-white transition-colors">FAQ</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
             </div>
-          </motion.div>
+            <p className="text-white/20">© 2025 mirai-bin</p>
+          </div>
         </div>
-      </footer >
-    </div >
+      </footer>
+    </div>
   );
 }
