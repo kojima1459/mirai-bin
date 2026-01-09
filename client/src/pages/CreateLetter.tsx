@@ -1,17 +1,24 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Check, Loader2, Mail, Lock
+  ArrowLeft, Check, Loader2, Mail, Lock, AlertTriangle, Calendar
 } from "lucide-react";
-import { motion } from "framer-motion";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-// Removed unused imports: Textarea, Checkbox, Popover..., Calendar
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { TemplateCatalogDialog } from "@/components/TemplateCatalogDialog";
 import { LetterCompletionView } from "@/components/LetterCompletionView";
@@ -32,6 +39,7 @@ import {
   encryptAudio
 } from "@/lib/crypto";
 import { splitKey } from "@/lib/shamir";
+import { saveEncryptedUnlockCodeOnce } from "@/lib/deviceSecrets";
 
 export default function CreateLetter() {
   const [, navigate] = useLocation();
@@ -63,6 +71,7 @@ export default function CreateLetter() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [encryptionProgress, setEncryptionProgress] = useState(0);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   // useDraftAutoSave hook instead of manual state
   const { draftId, isSaving, lastSaved, resetDraft } = useDraftAutoSave({
@@ -257,10 +266,15 @@ export default function CreateLetter() {
   // 保存（ゼロ知識版：暗号化 → Shamir分割 → アップロード → DB保存）
   const handleSave = async () => {
     if (!finalContent.trim()) {
-      toast.error("手紙の内容を入力してください");
+      toast.error("手紙の本文がまだ空っぽです");
       return;
     }
 
+    setShowConfirmDialog(true);
+  };
+
+  const executeSave = async () => {
+    setShowConfirmDialog(false);
     setStep("encrypting");
 
     try {
@@ -387,6 +401,9 @@ export default function CreateLetter() {
           toast.warning("リマインダーの設定に失敗しました");
         }
       }
+
+      // 10. 解錠コードを同一端末用1回再表示用にIndexedDBに保存
+      await saveEncryptedUnlockCodeOnce(letterResult.id, code);
 
       setStep("complete");
       toast.success("手紙を保存しました");
@@ -585,6 +602,46 @@ export default function CreateLetter() {
             </div>
           )
         }
+
+        {/* 保存最終確認ダイアログ */}
+        <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+          <AlertDialogContent className="bg-[#0a0a0a] border-white/10 text-white">
+            <AlertDialogHeader className="space-y-4">
+              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10 mx-auto">
+                <AlertTriangle className="h-6 w-6 text-white/70" />
+              </div>
+              <div className="text-center space-y-2">
+                <AlertDialogTitle className="text-xl">手紙を封緘しますか？</AlertDialogTitle>
+                <AlertDialogDescription className="text-white/50 text-sm leading-relaxed">
+                  保存を開始すると、手紙の内容はあなたの端末内で厳重に暗号化されます。<br />
+                  一度封緘すると、設定された開封日まで<br />
+                  <strong>あなた自身も内容を閲覧・編集できなくなります。</strong>
+                </AlertDialogDescription>
+              </div>
+              <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/30">宛先</span>
+                  <span className="text-white/70 font-medium">{recipientName || "指定なし"}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/30">開封予定</span>
+                  <span className="text-white/70 font-mono">
+                    {unlockDate ? format(getUnlockAt()!, "yyyy/MM/dd HH:mm") : "指定なし"}
+                  </span>
+                </div>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel className="w-full sm:w-auto bg-white/5 border-white/10 text-white hover:bg-white/10">戻って修正</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={executeSave}
+                className="w-full sm:w-auto bg-white text-black hover:bg-white/90 font-bold"
+              >
+                暗号化して保存する
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* 完了（リファクタ版） */}
         {

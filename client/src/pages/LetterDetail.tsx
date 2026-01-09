@@ -5,10 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { trpc } from "@/lib/trpc";
 
 import { useLocation, useParams } from "wouter";
-import { 
-  ArrowLeft, 
-  Loader2, 
-  Mail, 
+import {
+  ArrowLeft,
+  Loader2,
+  Mail,
   Lock,
   Clock,
   Share2,
@@ -27,6 +27,9 @@ import {
   Key,
   AlertTriangle,
   Download,
+  User,
+  Users,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -54,17 +57,17 @@ export default function LetterDetail() {
   const params = useParams<{ id: string }>();
   const letterId = parseInt(params.id || "0", 10);
   const utils = trpc.useUtils();
-  
+
   const [copied, setCopied] = useState(false);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
   const [showRotateDialog, setShowRotateDialog] = useState(false);
-  
+
   // スケジュール編集モード
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
   const [editUnlockAt, setEditUnlockAt] = useState("");
   const [editReminderEnabled, setEditReminderEnabled] = useState(true);
   const [editReminderDays, setEditReminderDays] = useState<number[]>([]);
-  
+
   // 解錠コード再発行
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -155,6 +158,17 @@ export default function LetterDetail() {
     },
   });
 
+  // 手紙削除
+  const deleteLetterMutation = trpc.letter.delete.useMutation({
+    onSuccess: () => {
+      toast.success("手紙を削除しました");
+      navigate("/my-letters");
+    },
+    onError: (error) => {
+      toast.error(error.message || "削除に失敗しました");
+    },
+  });
+
   // 認証チェック
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -197,8 +211,8 @@ export default function LetterDetail() {
   };
 
   const handleReminderDayToggle = (day: number) => {
-    setEditReminderDays(prev => 
-      prev.includes(day) 
+    setEditReminderDays(prev =>
+      prev.includes(day)
         ? prev.filter(d => d !== day)
         : [...prev, day].sort((a, b) => b - a)
     );
@@ -209,12 +223,12 @@ export default function LetterDetail() {
   // 再発行後の封筒PDF出力
   const handleExportRegeneratedPDF = (unlockCode: string, shareUrl: string | null) => {
     if (!unlockCode) return;
-    
+
     try {
-      const qrCodeUrl = shareUrl 
+      const qrCodeUrl = shareUrl
         ? `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(shareUrl)}&choe=UTF-8`
         : null;
-      
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -368,7 +382,7 @@ export default function LetterDetail() {
           </body>
         </html>
       `;
-      
+
       const printWindow = window.open('', '', 'width=800,height=600');
       if (printWindow) {
         printWindow.document.write(html);
@@ -407,7 +421,7 @@ export default function LetterDetail() {
     );
   }
 
-  const shareUrl = shareLinkStatus?.shareToken 
+  const shareUrl = shareLinkStatus?.shareToken
     ? `${window.location.origin}/share/${shareLinkStatus.shareToken}`
     : null;
 
@@ -416,61 +430,102 @@ export default function LetterDetail() {
   return (
     <div className="min-h-screen bg-background">
       {/* ヘッダー */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex h-14 sm:h-16 items-center justify-between px-4">
-          <div className="flex items-center">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/my-letters")}>
+      <header className="fixed top-0 w-full z-50 border-b border-white/5 bg-[#050505]/80 backdrop-blur-md">
+        <div className="container flex h-16 items-center justify-between px-6">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/my-letters")} className="rounded-full text-white/70 hover:text-white hover:bg-white/5">
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2 ml-2">
-              <Mail className="h-5 w-5 text-primary" />
-              <span className="font-semibold text-sm sm:text-base">手紙の詳細</span>
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-white/90" />
+              <span className="font-semibold tracking-tight">手紙の詳細</span>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-white/30 hover:text-destructive hover:bg-destructive/10 rounded-full">
+                  削除
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-[#0a0a0a] border-white/10 text-white">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>手紙を完全に削除しますか？</AlertDialogTitle>
+                  <AlertDialogDescription className="text-white/50">
+                    この操作は取り消せません。暗号化された手紙のデータ、音声、共有リンクのすべてがサーバーから削除されます。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10">キャンセル</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => deleteLetterMutation.mutate({ id: letterId })}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    削除する
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </header>
 
+      <div className="h-16" /> {/* Spacer for fixed header */}
+
       <main className="container py-4 sm:py-8 max-w-3xl px-4">
         <div className="space-y-4 sm:space-y-6">
           {/* 基本情報 */}
-          <Card>
-            <CardHeader className="pb-2">
+          <Card className="bg-white/5 border-white/5 overflow-hidden">
+            <CardHeader className="pb-4">
               <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-lg sm:text-xl">
-                    {letter.recipientName ? `${letter.recipientName}へ` : "手紙"}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    {letter.visibilityScope === "private" && (
+                      <Badge variant="outline" className="bg-white/5 text-white/40 border-white/5 flex items-center gap-1 py-0.5">
+                        <User className="h-3 w-3" /> 自分宛
+                      </Badge>
+                    )}
+                    {letter.visibilityScope === "family" && (
+                      <Badge variant="outline" className="bg-white/5 text-white/40 border-white/5 flex items-center gap-1 py-0.5">
+                        <Users className="h-3 w-3" /> 家族共有
+                      </Badge>
+                    )}
+                    {letter.visibilityScope === "link" && (
+                      <Badge variant="outline" className="bg-white/5 text-white/40 border-white/5 flex items-center gap-1 py-0.5">
+                        <Link2 className="h-3 w-3" /> リンク共有
+                      </Badge>
+                    )}
+                  </div>
+                  <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                    {letter.recipientName ? `${letter.recipientName} への手紙` : "未来への手紙"}
                   </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">
+                  <CardDescription className="text-white/40">
                     {letter.templateUsed || "カスタムテンプレート"}
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-2">
+                  <Badge variant="outline" className="bg-white/10 text-white/70 border-white/10 flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> 暗号化済み
+                  </Badge>
                   {isOpened && (
-                    <Badge variant="secondary" className="flex items-center gap-1">
-                      <Check className="h-3 w-3" />
-                      開封済み
+                    <Badge variant="secondary" className="bg-green-500/10 text-green-400 border-green-500/20 flex items-center gap-1">
+                      <Check className="h-3 w-3" /> 開封済み
                     </Badge>
                   )}
-                  <Badge variant="outline" className="flex items-center gap-1">
-                    <Lock className="h-3 w-3" />
-                    暗号化済み
-                  </Badge>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  <span>
-                    作成: {format(new Date(letter.createdAt), "yyyy年M月d日", { locale: ja })}
-                  </span>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-white/40 font-mono">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 opacity-50" />
+                  <span>作成: {format(new Date(letter.createdAt), "yyyy/MM/dd HH:mm", { locale: ja })}</span>
                 </div>
                 {letter.unlockAt && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    <span>
-                      開封日: {format(new Date(letter.unlockAt), "yyyy年M月d日", { locale: ja })}
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-md border border-white/5">
+                    <Calendar className="h-4 w-4 opacity-50" />
+                    <span className="text-white/60">
+                      開封予定: {format(new Date(letter.unlockAt), "yyyy/MM/dd HH:mm", { locale: ja })}
                     </span>
                   </div>
                 )}
@@ -492,8 +547,8 @@ export default function LetterDetail() {
                   </CardDescription>
                 </div>
                 {!isEditingSchedule && !isOpened && (
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => setIsEditingSchedule(true)}
                   >
@@ -558,11 +613,10 @@ export default function LetterDetail() {
                               key={day}
                               type="button"
                               onClick={() => handleReminderDayToggle(day)}
-                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                                editReminderDays.includes(day)
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-muted hover:bg-muted/80"
-                              }`}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${editReminderDays.includes(day)
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80"
+                                }`}
                             >
                               {day}日前
                             </button>
@@ -604,7 +658,7 @@ export default function LetterDetail() {
                       <span className="text-sm">開封日時</span>
                     </div>
                     <span className="text-sm font-medium">
-                      {letter.unlockAt 
+                      {letter.unlockAt
                         ? format(new Date(letter.unlockAt), "yyyy年M月d日 HH:mm", { locale: ja })
                         : "未設定"
                       }
@@ -654,8 +708,8 @@ export default function LetterDetail() {
                       <div className="flex-1 p-2 sm:p-3 bg-muted rounded-md text-xs sm:text-sm font-mono break-all">
                         {shareUrl}
                       </div>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={handleCopyLink}
                         className="h-10 sm:h-auto shrink-0"
@@ -769,7 +823,7 @@ export default function LetterDetail() {
                   <p className="text-muted-foreground text-sm">
                     共有リンクがまだ生成されていません
                   </p>
-                  <Button 
+                  <Button
                     onClick={() => generateShareLinkMutation.mutate({ id: letterId })}
                     disabled={generateShareLinkMutation.isPending}
                   >
@@ -800,8 +854,8 @@ export default function LetterDetail() {
               {reminders && reminders.reminders.length > 0 ? (
                 <div className="space-y-3">
                   {reminders.reminders.map((reminder) => (
-                    <div 
-                      key={reminder.id} 
+                    <div
+                      key={reminder.id}
                       className="flex items-center justify-between p-2 sm:p-3 bg-muted/50 rounded-md"
                     >
                       <div className="flex items-center gap-2 sm:gap-3">
@@ -821,7 +875,7 @@ export default function LetterDetail() {
                           )}
                         </div>
                       </div>
-                      <Badge 
+                      <Badge
                         variant={reminder.status === "sent" ? "default" : "secondary"}
                         className="text-xs"
                       >
@@ -845,8 +899,8 @@ export default function LetterDetail() {
           {shareLinkStatus?.hasActiveLink && (
             <Card>
               <CardContent className="pt-6">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full h-10 sm:h-auto"
                   onClick={() => window.open(`/share/${shareLinkStatus.shareToken}`, "_blank")}
                 >
@@ -946,25 +1000,25 @@ export default function LetterDetail() {
                                 // クライアント側で新しい解錠コードと封筒を生成
                                 const { generateUnlockCode, wrapClientShare } = await import("@/lib/crypto");
                                 const newCode = generateUnlockCode();
-                                
+
                                 // 既存のclientShareを取得（サーバーからは取得できないため、ユーザーに入力してもらう）
                                 // 注意: 実際には、ユーザーが旧コードを入力してclientShareを復号する必要がある
                                 // ここでは簡易的に、新しいclientShareを生成する
                                 // 実際の運用では、ユーザーが旧コードを入力して復号するフローが必要
-                                
+
                                 // ダミーのclientShareを生成（実際には旧コードで復号したものを使う）
                                 // この実装では、既存のclientShareを再利用できないため、
                                 // ユーザーに旧コードを入力してもらう必要がある
                                 // 今回は簡易実装として、新しいダミーShareを生成
                                 const dummyClientShare = "REGENERATED_CLIENT_SHARE_" + Date.now();
-                                
+
                                 const envelope = await wrapClientShare(dummyClientShare, newCode);
-                                
+
                                 await regenerateUnlockCodeMutation.mutateAsync({
                                   id: letterId,
                                   newEnvelope: envelope,
                                 });
-                                
+
                                 setRegeneratedCode(newCode);
                                 setShowRegenerateDialog(false);
                                 setIsRegenerating(false);

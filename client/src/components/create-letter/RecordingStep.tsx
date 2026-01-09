@@ -37,9 +37,9 @@ export function RecordingStep({
     return (
         <div className="bg-white/5 border border-white/5 rounded-2xl p-6 md:p-8 space-y-8 animate-in fade-in">
             <div className="text-center space-y-2">
-                <h2 className="text-xl font-bold tracking-tight text-white">想いを録音する</h2>
+                <h2 className="text-xl font-bold tracking-tight text-white">あなたの声を残す</h2>
                 <p className="text-white/50 text-sm">
-                    {selectedTemplatePrompt || "伝えたいことを自由に話してください"}
+                    {selectedTemplatePrompt || "リラックスして、普段通りの言葉で。"}
                 </p>
             </div>
 

@@ -65,7 +65,7 @@ export function deriveShareLetterState(
  * Validates JST date formatting
  */
 export function formatUnlockDateJST(isoString: string): string {
-    return format(new Date(isoString), "yyyy/MM/dd(EEE) HH:mm", { locale: ja });
+    return format(new Date(isoString), "yyyy/MM/dd HH:mm");
 }
 
 export function getRelativeTimeJST(isoString: string): string {

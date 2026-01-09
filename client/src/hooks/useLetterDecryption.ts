@@ -14,9 +14,13 @@ interface UseLetterDecryptionProps {
 
 export type DecryptionErrorType = "AUTH" | "NETWORK" | "SYSTEM" | null;
 
+export type AudioDecryptError = "DECODE_FAILED" | "UNSUPPORTED_MIME" | null;
+
 export interface DecryptedContent {
     content: string;
     audioUrl?: string;
+    audioBlob?: Blob;
+    audioError?: AudioDecryptError;
 }
 
 export function useLetterDecryption({ shareToken, onSuccess }: UseLetterDecryptionProps) {
@@ -78,22 +82,34 @@ export function useLetterDecryption({ shareToken, onSuccess }: UseLetterDecrypti
 
             // Decrypt Audio (Optional)
             let audioUrl: string | undefined;
+            let audioBlob: Blob | undefined;
+            let audioError: AudioDecryptError = null;
+
             if (data.encryptedAudio) {
                 try {
                     const audioRes = await fetch(data.encryptedAudio.url);
                     if (audioRes.ok) {
                         const audioBuffer = await audioRes.arrayBuffer();
-                        const audioBlob = await decryptAudio(
+                        const mimeType = data.encryptedAudio.mimeType || "audio/webm";
+
+                        // Safari互換性チェック（audio/webmはSafariで非対応の可能性）
+                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                        if (isSafari && mimeType.includes("webm")) {
+                            console.warn("Safari detected with webm audio - may not play");
+                        }
+
+                        audioBlob = await decryptAudio(
                             audioBuffer,
                             data.encryptedAudio.iv || "",
                             keyBase64,
-                            data.encryptedAudio.mimeType || "audio/webm"
+                            mimeType
                         );
                         audioUrl = URL.createObjectURL(audioBlob);
                     }
                 } catch (e) {
                     console.warn("Audio decryption failed", e);
-                    // Non-fatal error
+                    audioError = "DECODE_FAILED";
+                    // Non-fatal error - continue with text
                 }
             }
 
@@ -103,7 +119,7 @@ export function useLetterDecryption({ shareToken, onSuccess }: UseLetterDecrypti
                 // Non-fatal
             });
 
-            setDecryptedContent({ content, audioUrl });
+            setDecryptedContent({ content, audioUrl, audioBlob, audioError });
             onSuccess();
 
         } catch (err: unknown) {
@@ -126,15 +142,126 @@ export function useLetterDecryption({ shareToken, onSuccess }: UseLetterDecrypti
         }
     };
 
+    /**
+     * 緊急復号: backupShare + serverShare で復号
+     * 解錠コードを紛失した場合に使用
+     */
+    const decryptWithBackup = async (backupShare: string, data: LetterData) => {
+        if (!data || !data.canUnlock || !data.serverShare) {
+            setBackupError("DECRYPT_FAILED");
+            return;
+        }
+
+        setIsDecrypting(true);
+        setBackupError(null);
+
+        try {
+            // Validate Input
+            if (backupShare.length < 10) {
+                throw new Error("INVALID_FORMAT");
+            }
+
+            // Check required data
+            if (!data.letter?.ciphertextUrl || !data.letter?.encryptionIv) {
+                console.error("Missing encryption data");
+                throw new Error("MISSING_DATA");
+            }
+
+            // Combine backupShare + serverShare (instead of clientShare + serverShare)
+            let keyBase64;
+            try {
+                keyBase64 = await combineShares(backupShare, data.serverShare);
+            } catch (e) {
+                console.error("Failed to combine shares:", e);
+                throw new Error("DECRYPT_FAILED");
+            }
+
+            // Fetch Ciphertext
+            let ciphertext;
+            try {
+                const res = await fetch(data.letter.ciphertextUrl);
+                if (!res.ok) throw new Error("Fetch failed");
+                ciphertext = await res.text();
+            } catch (e) {
+                throw new Error("NETWORK_FAILED");
+            }
+
+            // Decrypt Letter
+            let content;
+            try {
+                content = await decryptLetter(
+                    ciphertext,
+                    data.letter.encryptionIv,
+                    keyBase64
+                );
+            } catch (e) {
+                console.error("Letter decryption failed:", e);
+                throw new Error("DECRYPT_FAILED");
+            }
+
+            // Decrypt Audio (Optional)
+            let audioUrl: string | undefined;
+            let audioBlob: Blob | undefined;
+            let audioError: AudioDecryptError = null;
+
+            if (data.encryptedAudio) {
+                try {
+                    const audioRes = await fetch(data.encryptedAudio.url);
+                    if (audioRes.ok) {
+                        const audioBuffer = await audioRes.arrayBuffer();
+                        const mimeType = data.encryptedAudio.mimeType || "audio/webm";
+
+                        audioBlob = await decryptAudio(
+                            audioBuffer,
+                            data.encryptedAudio.iv || "",
+                            keyBase64,
+                            mimeType
+                        );
+                        audioUrl = URL.createObjectURL(audioBlob);
+                    }
+                } catch (e) {
+                    console.warn("Audio decryption failed", e);
+                    audioError = "DECODE_FAILED";
+                }
+            }
+
+            // Success side effects
+            await markOpenedMutation.mutateAsync({ shareToken }).catch(e => {
+                console.warn("Failed to mark as opened", e);
+            });
+
+            setDecryptedContent({ content, audioUrl, audioBlob, audioError });
+            onSuccess();
+
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+
+            if (message === "INVALID_FORMAT") {
+                setBackupError("INVALID_FORMAT");
+            } else if (message === "NETWORK_FAILED") {
+                setError("NETWORK");
+            } else {
+                setBackupError("DECRYPT_FAILED");
+            }
+        } finally {
+            setIsDecrypting(false);
+        }
+    };
+
+    const [backupError, setBackupError] = useState<"INVALID_FORMAT" | "DECRYPT_FAILED" | null>(null);
+
     const resetState = () => {
         setError(null);
+        setBackupError(null);
         setDecryptedContent(null);
     };
 
     return {
         decrypt,
+        decryptWithBackup,
         isDecrypting,
         error,
+        backupError,
         decryptedContent,
         resetState
     };

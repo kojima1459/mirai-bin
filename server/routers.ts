@@ -3,13 +3,74 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createLetter, getLetterById, getLettersByAuthor, updateLetter, deleteLetter, getAllTemplates, getTemplateByName, seedTemplates, getLetterByShareToken, updateLetterShareToken, incrementViewCount, unlockLetter, createDraft, getDraftById, getDraftsByUser, updateDraft, deleteDraft, getDraftByUserAndId, updateUserNotificationEmail, updateUserEmail, createRemindersForLetter, getRemindersByLetterId, updateLetterReminders, deleteRemindersByLetterId, getShareTokenRecord, getActiveShareToken, createShareToken, revokeShareToken, rotateShareToken, incrementShareTokenViewCount, migrateShareTokenIfNeeded, regenerateUnlockCode, getLettersByScope, canAccessLetter, createFamily, getFamilyByOwner, getFamilyMemberships, getFamilyMembers, createFamilyInvite, acceptFamilyInvite, getFamilyInvites, isUserFamilyMember, createInterviewSession, getInterviewSession, getActiveInterviewSession, addInterviewMessage, getInterviewHistory, completeInterviewSession } from "./db";
+import { eq } from "drizzle-orm";
+import { users } from "../drizzle/schema";
+import {
+  createLetter,
+  getLetterById,
+  getLettersByAuthor,
+  updateLetter,
+  deleteLetter,
+  getAllTemplates,
+  getTemplateByName,
+  seedTemplates,
+  getLetterByShareToken,
+  updateLetterShareToken,
+  incrementViewCount,
+  unlockLetter,
+  createDraft,
+  getDraftById,
+  getDraftsByUser,
+  updateDraft,
+  deleteDraft,
+  getDraftByUserAndId,
+  updateUserNotificationEmail,
+  updateUserEmail,
+  updateUserTrustedContactEmail,
+  createRemindersForLetter,
+  getRemindersByLetterId,
+  updateLetterReminders,
+  deleteRemindersByLetterId,
+  getShareTokenRecord,
+  getActiveShareToken,
+  createShareToken,
+  revokeShareToken,
+  rotateShareToken,
+  incrementShareTokenViewCount,
+  migrateShareTokenIfNeeded,
+  regenerateUnlockCode,
+  getLettersByScope,
+  canAccessLetter,
+  createFamily,
+  getFamilyByOwner,
+  getFamilyMemberships,
+  getFamilyMembers,
+  createFamilyInvite,
+  acceptFamilyInvite,
+  getFamilyInvites,
+  isUserFamilyMember,
+  createInterviewSession,
+  getInterviewSession,
+  getActiveInterviewSession,
+  addInterviewMessage,
+  getInterviewHistory,
+  completeInterviewSession,
+  updateUserNotificationSettings, // Added this function
+} from "./db";
 import { invokeLLM, Role } from "./_core/llm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import { stampHash, generateProofInfo } from "./opentimestamps";
 import { canProvideServerShare } from "./shamir";
+import {
+  createNotification,
+  getNotifications,
+  getUnreadCount,
+  markNotificationAsRead,
+  createReminderNotification,
+} from "./db_notification";
+import { getDb } from "./db";
 
 export const appRouter = router({
   system: systemRouter,
@@ -32,13 +93,74 @@ export const appRouter = router({
     /**
      * 通知先メールを更新
      * 未設定（null）ならアカウントメールを使用
+     * 変更時はverified=falseにリセットされ、検証メールを送る
      */
     updateNotificationEmail: protectedProcedure
       .input(z.object({
         notificationEmail: z.string().email().nullable(),
       }))
       .mutation(async ({ ctx, input }) => {
-        await updateUserNotificationEmail(ctx.user.id, input.notificationEmail);
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        if (input.notificationEmail) {
+          // Generate verification token
+          const verifyToken = nanoid(32);
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+          await db.update(users).set({
+            notificationEmail: input.notificationEmail,
+            notificationEmailVerified: false,
+            notificationEmailVerifyToken: verifyToken,
+            notificationEmailVerifyExpiresAt: expiresAt,
+          }).where(eq(users.id, ctx.user.id));
+
+          // TODO: Send verification email with token
+          // For now, auto-verify in development
+          console.log(`[Email Verification] Token for user ${ctx.user.id}: ${verifyToken}`);
+
+          return { success: true, requiresVerification: true };
+        } else {
+          // Clearing notification email
+          await db.update(users).set({
+            notificationEmail: null,
+            notificationEmailVerified: false,
+            notificationEmailVerifyToken: null,
+            notificationEmailVerifyExpiresAt: null,
+          }).where(eq(users.id, ctx.user.id));
+          return { success: true, requiresVerification: false };
+        }
+      }),
+
+    /**
+     * メール検証トークンで確認
+     */
+    verifyNotificationEmail: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const result = await db.select().from(users)
+          .where(eq(users.notificationEmailVerifyToken, input.token))
+          .limit(1);
+
+        if (result.length === 0) {
+          return { success: false, error: "invalid_token" };
+        }
+
+        const user = result[0];
+        const now = new Date();
+        if (user.notificationEmailVerifyExpiresAt && user.notificationEmailVerifyExpiresAt < now) {
+          return { success: false, error: "token_expired" };
+        }
+
+        await db.update(users).set({
+          notificationEmailVerified: true,
+          notificationEmailVerifyToken: null,
+          notificationEmailVerifyExpiresAt: null,
+        }).where(eq(users.id, user.id));
+
         return { success: true };
       }),
 
@@ -49,8 +171,55 @@ export const appRouter = router({
       .query(async ({ ctx }) => {
         return {
           notificationEmail: ctx.user.notificationEmail || null,
+          notificationEmailVerified: ctx.user.notificationEmailVerified ?? false,
+          trustedContactEmail: ctx.user.trustedContactEmail || null,
           accountEmail: ctx.user.email || null,
+          notifyEnabled: ctx.user.notifyEnabled ?? true,
+          notifyDaysBefore: ctx.user.notifyDaysBefore ?? 7,
         };
+      }),
+
+    /**
+     * 信頼できる通知先メールを更新
+     * 配偶者などの通知先（リマインド/初回開封通知を送信）
+     */
+    updateTrustedContactEmail: protectedProcedure
+      .input(z.object({
+        trustedContactEmail: z.string().email().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateUserTrustedContactEmail(ctx.user.id, input.trustedContactEmail);
+        return { success: true };
+      }),
+
+    /**
+     * リマインド通知設定を更新
+     */
+    updateNotificationSettings: protectedProcedure
+      .input(z.object({
+        notifyEnabled: z.boolean(),
+        notifyDaysBefore: z.number().int().min(1).max(365),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await updateUserNotificationSettings(ctx.user.id, input.notifyEnabled, input.notifyDaysBefore);
+
+        // 既存の未開封手紙のリマインダーを再計算
+        const letters = await getLettersByAuthor(ctx.user.id);
+        const futureLetters = letters.filter(l =>
+          l.unlockAt && new Date(l.unlockAt) > new Date() && !l.unlockedAt
+        );
+
+        for (const letter of futureLetters) {
+          if (!input.notifyEnabled) {
+            // 通知無効化: 未送信リマインダーをキャンセル
+            await deleteRemindersByLetterId(letter.id);
+          } else {
+            // 通知日数変更: リマインダー再計算
+            await updateLetterReminders(letter.id, ctx.user.id, new Date(letter.unlockAt!), [input.notifyDaysBefore]);
+          }
+        }
+
+        return { success: true };
       }),
 
     /**
@@ -166,11 +335,19 @@ export const appRouter = router({
             });
             console.log(`[OTS] Letter ${letterId} submitted to OpenTimestamps`);
           } else {
-            console.warn(`[OTS] Failed to stamp letter ${letterId}:`, result.error);
+            console.warn(`[OTS] Failed to stamp letter ${letterId}: `, result.error);
           }
         }).catch((error) => {
-          console.error(`[OTS] Error stamping letter ${letterId}:`, error);
+          console.error(`[OTS] Error stamping letter ${letterId}: `, error);
         });
+
+        // リマインダー自動作成（ユーザー設定に基づく）
+        if (input.unlockAt && ctx.user.notifyEnabled !== false) {
+          const daysBefore = ctx.user.notifyDaysBefore ?? 7;
+          createRemindersForLetter(letterId, ctx.user.id, new Date(input.unlockAt), [daysBefore]).catch((err) => {
+            console.warn(`[Reminder] Failed to create reminder for letter ${letterId}:`, err);
+          });
+        }
 
         return { id: letterId };
       }),
@@ -600,7 +777,7 @@ export const appRouter = router({
             const unlockTimeStr = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
             await notifyOwner({
               title: `未来便: 手紙が開封されました`,
-              content: `あなたの手紙が開封されました。\n\n宛先: ${letter.recipientName || "未設定"}\n開封日時: ${unlockTimeStr}\n\n※ 本文はゼロ知識設計のため、運営者も読めません。`,
+              content: `あなたの手紙が開封されました。\n\n宛先: ${letter.recipientName || "未設定"} \n開封日時: ${unlockTimeStr} \n\n※ 本文はゼロ知識設計のため、運営者も読めません。`,
             });
           } catch (err) {
             // 通知失敗はログのみ（開封処理は成功させる）
@@ -907,7 +1084,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.audioBase64, "base64");
-        const fileKey = `audio/${ctx.user.id}/${nanoid()}.webm`;
+        const fileKey = `audio / ${ctx.user.id}/${nanoid()}.webm`;
 
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { url, key: fileKey };
@@ -1244,6 +1421,50 @@ JSON以外の余計な文字は含めないでください。
         }
         const invites = await getFamilyInvites(input.familyId);
         return { invites };
+      }),
+  }),
+
+  // ============================================
+  // Notification Router (In-App Inbox)
+  // ============================================
+  notification: router({
+    /**
+     * Get user's notifications (newest first)
+     */
+    list: protectedProcedure
+      .input(z.object({
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) return { notifications: [] };
+        const items = await getNotifications(db, ctx.user.id, input.limit, input.offset);
+        return { notifications: items };
+      }),
+
+    /**
+     * Get unread notification count (for badge)
+     */
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { count: 0 };
+      const count = await getUnreadCount(db, ctx.user.id);
+      return { count };
+    }),
+
+    /**
+     * Mark notification(s) as read
+     */
+    markRead: protectedProcedure
+      .input(z.object({
+        notificationId: z.number().optional(), // If omitted, mark all as read
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) return { success: false };
+        await markNotificationAsRead(db, ctx.user.id, input.notificationId);
+        return { success: true };
       }),
   }),
 });

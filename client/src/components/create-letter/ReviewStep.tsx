@@ -11,6 +11,17 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface ReviewStepProps {
     isRawMode: boolean;
@@ -62,9 +73,9 @@ export function ReviewStep({
         <div className="space-y-6">
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-6 animate-in fade-in">
                 <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                    <h3 className="text-lg font-bold tracking-tight text-white">手紙の内容を確認</h3>
-                    <span className="text-xs bg-white/10 text-white/70 px-2 py-1 rounded">
-                        {isRawMode ? "話したままモード" : "AI生成モード"}
+                    <h3 className="text-lg font-bold tracking-tight text-white">内容の最終確認</h3>
+                    <span className="text-[10px] bg-white/10 text-white/40 px-2 py-0.5 rounded font-mono uppercase tracking-wider">
+                        {isRawMode ? "Stream" : "Draft"}
                     </span>
                 </div>
 
@@ -130,7 +141,7 @@ export function ReviewStep({
                                         )}
                                     >
                                         {unlockDate ? (
-                                            format(unlockDate, "PPP", { locale: ja })
+                                            format(unlockDate, "yyyy/MM/dd", { locale: ja })
                                         ) : (
                                             <span>日付を選択</span>
                                         )}
@@ -207,16 +218,15 @@ export function ReviewStep({
                     {isEncrypting ? (
                         <>
                             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            暗号化して保存中...
+                            封印中...
                         </>
                     ) : (
                         <>
-                            タイムカプセルを封印する
+                            未来へ封印する
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </>
                     )}
                 </Button>
-            </div>
-        </div>
+            </div>        </div>
     );
 }

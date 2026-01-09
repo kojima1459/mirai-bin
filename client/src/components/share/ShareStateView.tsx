@@ -31,70 +31,105 @@ export function ShareStateView({ state, unlockAt, onRetry }: ShareStateViewProps
 
     const config = {
         TOKEN_NOT_FOUND: {
-            icon: <HelpCircle className="h-8 w-8" />,
+            icon: <HelpCircle className="h-6 w-6" />,
             title: "リンクが見つかりません",
             body: "URLが間違っているか、既に無効になっています。",
             action: (
                 <div className="flex flex-col gap-3 w-full">
                     <Button variant="outline" onClick={handleContactSender} className="border-white/10 text-white hover:bg-white/5 rounded-full">送信者に確認する</Button>
-                    <Button variant="ghost" onClick={onRetry} className="text-white/50 hover:text-white hover:bg-white/5 rounded-full">もう一度読み込む</Button>
+                    <Button variant="ghost" onClick={onRetry} className="text-white/50 hover:text-white hover:bg-white/5 rounded-full">再読み込み</Button>
                 </div>
             )
         },
         TOKEN_CANCELED: {
-            icon: <Ban className="h-8 w-8" />,
+            icon: <Ban className="h-6 w-6" />,
             title: "取り消されました",
             body: "この手紙の送信は取り消されています。",
             action: <Button variant="outline" onClick={handleContactSender} className="border-white/10 text-white hover:bg-white/5 rounded-full w-full">送信者に確認する</Button>
         },
         TOKEN_REVOKED: {
-            icon: <FileWarning className="h-8 w-8" />,
+            icon: <FileWarning className="h-6 w-6" />,
             title: "リンク無効",
             body: "安全のため、このリンクは無効化されました。",
             action: <Button variant="outline" onClick={handleContactSender} className="border-white/10 text-white hover:bg-white/5 rounded-full w-full">送信者に確認する</Button>
         },
         TOKEN_ROTATED: {
-            icon: <RefreshCw className="h-8 w-8" />,
+            icon: <RefreshCw className="h-6 w-6" />,
             title: "リンク更新済み",
             body: "新しいリンクが発行されている可能性があります。",
             action: <Button variant="outline" onClick={handleContactSender} className="border-white/10 text-white hover:bg-white/5 rounded-full w-full">送信者に確認する</Button>
         },
         NOT_YET_OPENABLE: {
-            icon: <Clock className="h-8 w-8" />,
+            icon: <Lock className="h-6 w-6 text-white/70" />,
             title: "まだ開封できません",
             body: (
-                <div className="space-y-6">
-                    <p className="text-sm">その瞬間が来るまで、<br />大切にお預かりしています。</p>
+                <div className="space-y-8">
+                    <p className="text-sm text-white/50">
+                        タイムカプセルは封印されています。<br />
+                        その時が来るまで、大切にお待ちください。
+                    </p>
                     {unlockAt && (
-                        <div className="bg-white/5 py-6 px-4 rounded-2xl text-center border border-white/10">
-                            <span className="text-xs font-bold tracking-[0.2em] uppercase text-white/40 block mb-3">Unlock Date</span>
-                            <div className="text-2xl font-bold tracking-tight font-mono text-white">{formatUnlockDateJST(unlockAt)}</div>
-                            <div className="text-sm text-white/50 mt-2 font-medium">{getRelativeTimeJST(unlockAt)}</div>
+                        <div className="flex flex-col items-center gap-2">
+                            <span className="text-[10px] font-medium tracking-[0.2em] uppercase text-white/30">
+                                Unlock Date
+                            </span>
+                            <div className="text-3xl font-bold tracking-tight font-mono text-white/90">{formatUnlockDateJST(unlockAt)}</div>
+                            <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/50" />
+                                <span className="text-xs text-white/50 font-medium">開封まで {getRelativeTimeJST(unlockAt)}</span>
+                            </div>
                         </div>
                     )}
                 </div>
             ),
             action: (
                 <div className="flex flex-col gap-3 w-full">
-                    <Button onClick={handleCopyUrl} className="w-full bg-white text-black hover:bg-white/90 rounded-full font-semibold">URLを保存する</Button>
+                    <Button onClick={handleCopyUrl} className="w-full bg-white text-black hover:bg-white/90 rounded-full font-semibold h-12">URLを保存しておく</Button>
                     <Button variant="ghost" onClick={onRetry} className="text-white/50 hover:text-white hover:bg-white/5 rounded-full">再読み込み</Button>
                 </div>
             )
         },
         ALREADY_OPENED: {
-            icon: <Lock className="h-8 w-8" />,
+            icon: <Lock className="h-6 w-6 text-white/70" />,
             title: "開封済みです",
-            body: "セキュリティ保護のため、同じURLからは一度しかアクセスできません。",
-            action: <Button variant="outline" onClick={handleContactSender} className="border-white/10 text-white hover:bg-white/5 rounded-full w-full">送信者に確認する</Button>
+            body: (
+                <div className="space-y-4">
+                    <p className="text-sm text-white/50">
+                        手紙は一度しか開くことができません。<br />
+                        別の端末で既に開かれた可能性があります。
+                    </p>
+                </div>
+            ),
+            action: (
+                <div className="flex flex-col gap-3 w-full">
+                    <Button variant="outline" onClick={handleContactSender} className="border-white/10 text-white hover:bg-white/5 rounded-full w-full">
+                        送信者に確認する
+                    </Button>
+                </div>
+            )
         },
         CODE_INVALID: {
-            icon: <AlertCircle className="h-8 w-8" />,
-            title: "認証失敗",
-            body: "解錠コードが正しくありません。12文字のコードをご確認ください。",
-            action: <Button onClick={onRetry} className="w-full bg-white text-black hover:bg-white/90 rounded-full font-semibold">再入力する</Button>
+            icon: <AlertCircle className="h-6 w-6 text-white/70" />,
+            title: "コードが違います",
+            body: (
+                <div className="space-y-4">
+                    <p className="text-sm text-white/50">
+                        入力されたコードが正しくありません。<br />
+                        大文字・小文字を確認してください。
+                    </p>
+                </div>
+            ),
+            action: (
+                <div className="flex flex-col gap-3 w-full">
+                    <Button onClick={onRetry} className="w-full bg-white text-black hover:bg-white/90 rounded-full font-semibold h-12">コードを再入力</Button>
+                    <Button variant="ghost" onClick={handleContactSender} className="text-white/50 hover:text-white hover:bg-white/5 rounded-full">
+                        送信者に連絡する
+                    </Button>
+                </div>
+            )
         },
         NETWORK_OR_UNKNOWN: {
-            icon: <AlertCircle className="h-8 w-8" />,
+            icon: <AlertCircle className="h-6 w-6" />,
             title: "読み込みエラー",
             body: "通信状況を確認して、もう一度お試しください。",
             action: <Button onClick={onRetry} className="w-full bg-white text-black hover:bg-white/90 rounded-full font-semibold">再読み込み</Button>

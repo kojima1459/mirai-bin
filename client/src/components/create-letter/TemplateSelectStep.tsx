@@ -57,21 +57,20 @@ export function TemplateSelectStep({
                     <p className="text-white/50 text-sm">シチュエーションに合わせて選んでください</p>
                 </div>
 
-                <div className={`grid gap-4 ${!recipientName.trim() ? "opacity-50 pointer-events-none" : ""}`}>
+                <div className={`grid gap-3 ${!recipientName.trim() ? "opacity-50 pointer-events-none" : ""}`}>
                     {/* 1. 自由形式 */}
                     <button
                         onClick={onSelectFree}
-                        className="group relative overflow-hidden rounded-2xl bg-white/5 border border-white/5 p-6 text-left transition-all hover:bg-white/10 hover:border-white/10 hover:scale-[1.01] active:scale-[0.99]"
+                        className="group relative overflow-hidden rounded-xl bg-white/5 border border-white/5 p-5 text-left transition-all hover:bg-white/10 hover:border-white/10 hover:scale-[1.005] active:scale-[0.995]"
                     >
-                        <div className="flex items-start gap-4">
-                            <div className="rounded-full bg-white/10 p-3 text-white group-hover:bg-white/20 transition-colors">
-                                <Mic className="h-6 w-6" />
+                        <div className="flex items-center gap-4">
+                            <div className="rounded-full bg-white/5 p-2.5 text-white/70 group-hover:text-white group-hover:bg-white/10 transition-colors">
+                                <Mic className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-white tracking-tight text-lg mb-1">自由に話す</h3>
-                                <p className="text-sm text-white/50 leading-relaxed">
-                                    テーマを決めずに、想いのままに話しかけます。<br />
-                                    AIが良い感じに手紙として整えます。
+                                <h3 className="font-semibold text-white tracking-tight mb-0.5">自由に話す</h3>
+                                <p className="text-xs text-white/40 leading-relaxed">
+                                    テーマを決めずに、想いのままに話しかける
                                 </p>
                             </div>
                         </div>
@@ -80,17 +79,16 @@ export function TemplateSelectStep({
                     {/* 2. そのまま文字起こし */}
                     <button
                         onClick={onSelectRaw}
-                        className="group relative overflow-hidden rounded-2xl bg-white/5 border border-white/5 p-6 text-left transition-all hover:bg-white/10 hover:border-white/10 hover:scale-[1.01] active:scale-[0.99]"
+                        className="group relative overflow-hidden rounded-xl bg-white/5 border border-white/5 p-5 text-left transition-all hover:bg-white/10 hover:border-white/10 hover:scale-[1.005] active:scale-[0.995]"
                     >
-                        <div className="flex items-start gap-4">
-                            <div className="rounded-full bg-white/10 p-3 text-white group-hover:bg-white/20 transition-colors">
-                                <FileText className="h-6 w-6" />
+                        <div className="flex items-center gap-4">
+                            <div className="rounded-full bg-white/5 p-2.5 text-white/70 group-hover:text-white group-hover:bg-white/10 transition-colors">
+                                <FileText className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-white tracking-tight text-lg mb-1">話したまま記録</h3>
-                                <p className="text-sm text-white/50 leading-relaxed">
-                                    AIによる修正を行わず、あなたの言葉を<br />
-                                    そのまま「書き起こし」として残します。
+                                <h3 className="font-semibold text-white tracking-tight mb-0.5">話したまま記録</h3>
+                                <p className="text-xs text-white/40 leading-relaxed">
+                                    AI修正なしで、言葉をそのまま残す
                                 </p>
                             </div>
                         </div>
@@ -99,22 +97,18 @@ export function TemplateSelectStep({
                     {/* 3. AIインタビュー */}
                     <button
                         onClick={onSelectInterview}
-                        className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 p-6 text-left transition-all hover:from-indigo-500/20 hover:to-purple-500/20 hover:border-indigo-500/30 hover:scale-[1.01] active:scale-[0.99]"
+                        className="group relative overflow-hidden rounded-xl bg-white/5 border border-white/5 p-5 text-left transition-all hover:bg-white/10 hover:border-white/10 hover:scale-[1.005] active:scale-[0.995]"
                     >
-                        <div className="flex items-start gap-4">
-                            <div className="rounded-full bg-indigo-500/20 p-3 text-indigo-300 group-hover:bg-indigo-500/30 transition-colors">
-                                <Sparkles className="h-6 w-6" />
+                        <div className="flex items-center gap-4">
+                            <div className="rounded-full bg-white/5 p-2.5 text-white/70 group-hover:text-white group-hover:bg-white/10 transition-colors">
+                                <Sparkles className="h-5 w-5" />
                             </div>
                             <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="font-bold text-indigo-200 tracking-tight text-lg">AIと話しながら</h3>
-                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
-                                        おすすめ
-                                    </span>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <h3 className="font-semibold text-white tracking-tight">AIと話しながら</h3>
                                 </div>
-                                <p className="text-sm text-indigo-200/50 leading-relaxed">
-                                    何を書けばいいかわからない時は、<br />
-                                    AIからの質問に答えるだけで作れます。
+                                <p className="text-xs text-white/40 leading-relaxed">
+                                    質問に答えるだけで、手紙が出来上がる
                                 </p>
                             </div>
                         </div>
@@ -153,7 +147,7 @@ export function TemplateSelectStep({
                         onClick={onNext}
                         className="bg-white text-black hover:bg-white/90 rounded-full font-semibold"
                     >
-                        次へ <ArrowRight className="ml-1 h-3 w-3" />
+                        録音へ進む <ArrowRight className="ml-1 h-3 w-3" />
                     </Button>
                 </div>
             )}

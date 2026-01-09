@@ -1,10 +1,123 @@
+import { useState } from "react";
 import { Link } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, AlertTriangle, FileText, Key, Mail, Shield, Users, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, AlertTriangle, FileText, Key, Mail, Shield, Users, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 
 export default function AccountRecovery() {
+  const { user, loading: authLoading } = useAuth();
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // 設定を取得
+  const { data: settings } = trpc.user.getSettings.useQuery(
+    undefined,
+    { enabled: !!user }
+  );
+
+  // 手紙一覧を取得（本文なし）
+  const { data: letters } = trpc.letter.list.useQuery(
+    { scope: "private" },
+    { enabled: !!user }
+  );
+
+  const handleGenerateGuide = () => {
+    setIsGenerating(true);
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>未来便 - 引き継ぎガイド</title>
+            <style>
+              @media print { .page { page-break-after: always; } .page:last-child { page-break-after: avoid; } }
+              body { font-family: 'Hiragino Kaku Gothic ProN', sans-serif; margin: 0; padding: 40px; color: #333; line-height: 1.8; }
+              .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e67e22; }
+              .header h1 { color: #e67e22; font-size: 24px; margin: 0 0 10px 0; }
+              .section { margin-bottom: 25px; }
+              .section h2 { color: #e67e22; font-size: 16px; border-left: 4px solid #e67e22; padding-left: 12px; margin-bottom: 12px; }
+              .info-box { background: #f8f8f8; border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin: 10px 0; }
+              .warning-box { background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 12px 16px; border-radius: 8px; margin: 10px 0; }
+              .write-here { border: 2px dashed #ccc; padding: 20px; margin: 10px 0; min-height: 40px; border-radius: 8px; }
+              .write-label { color: #999; font-size: 11px; margin-bottom: 8px; }
+              table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background: #f0f0f0; }
+            </style>
+          </head>
+          <body>
+            <div class="page">
+              <div class="header">
+                <h1>未来便 - 引き継ぎガイド</h1>
+                <div style="color:#666;font-size:12px;">生成日: ${format(new Date(), "yyyy年M月d日", { locale: ja })}</div>
+              </div>
+              <div class="section">
+                <h2>このサービスについて</h2>
+                <p>「未来便」は、大切な人へ未来の約束の日に届くメッセージを保管するサービスです。手紙は暗号化され、指定日まで誰にも読めません。</p>
+              </div>
+              <div class="section">
+                <h2>ログイン情報</h2>
+                <div class="info-box">
+                  <p><strong>URL:</strong> https://mirai-bin.manus.space</p>
+                  <p><strong>アカウントメール:</strong> ${settings?.accountEmail || "（設定画面で確認）"}</p>
+                  <p><strong>通知先:</strong> ${settings?.notificationEmail || settings?.accountEmail || "未設定"}</p>
+                  <p><strong>信頼できる通知先:</strong> ${settings?.trustedContactEmail || "未設定"}</p>
+                </div>
+              </div>
+              <div class="section">
+                <h2>手紙一覧（本文は含まれません）</h2>
+                <table>
+                  <thead><tr><th>宛先</th><th>開封日</th><th>状態</th></tr></thead>
+                  <tbody>
+                    ${letters?.map(l => `<tr><td>${l.recipientName || "（未設定）"}</td><td>${l.unlockAt ? format(new Date(l.unlockAt), "yyyy年M月d日", { locale: ja }) : "未設定"}</td><td>${l.isUnlocked ? "開封済" : "未開封"}</td></tr>`).join("") || "<tr><td colspan='3'>手紙がありません</td></tr>"}
+                  </tbody>
+                </table>
+              </div>
+              <div class="warning-box">
+                <strong>重要:</strong> 共有リンクと解錠コードは同じ場所に保管しないでください。別々に保管することを推奨します。
+              </div>
+            </div>
+            <div class="page">
+              <div class="header"><h1>保管場所メモ</h1></div>
+              <div class="section">
+                <h2>封筒PDF（共有リンク）の保管場所</h2>
+                <div class="write-here"><div class="write-label">手書きで記入:</div></div>
+              </div>
+              <div class="section">
+                <h2>解錠コードの保管場所</h2>
+                <div class="write-here"><div class="write-label">手書きで記入:</div></div>
+              </div>
+              <div class="section">
+                <h2>その他のメモ</h2>
+                <div class="write-here" style="min-height:80px;"><div class="write-label">手書きで記入:</div></div>
+              </div>
+              <div class="warning-box">
+                <strong>注意:</strong> このドキュメントに秘密情報（解錠コード等）は含まれていません。
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+      const printWindow = window.open('', '', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 500);
+        toast.success("印刷ダイアログを開きました");
+      }
+    } catch (err) {
+      console.error("引き継ぎガイド生成エラー:", err);
+      toast.error("引き継ぎガイドの生成に失敗しました");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleCopyExplanation = () => {
     const text = `【未来便 アカウント引き継ぎ情報】
 
@@ -67,6 +180,36 @@ export default function AccountRecovery() {
               このページの手順に従って、大切な人に引き継ぎ情報を残しておきましょう。
             </div>
           </div>
+
+          {/* 引き継ぎガイド生成ボタン */}
+          {user && (
+            <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                  <Download className="h-5 w-5 text-white/60" />
+                </div>
+                <div>
+                  <h2 className="font-semibold tracking-tight">引き継ぎガイドを生成</h2>
+                  <p className="text-xs text-white/40">印刷して保管、または信頼できる人に渡してください</p>
+                </div>
+              </div>
+              <p className="text-sm text-white/50">
+                ログイン情報、通知先、手紙一覧、保管場所メモ欄を含むPDFを生成します。
+                秘密情報（解錠コード等）は含まれません。
+              </p>
+              <Button
+                onClick={handleGenerateGuide}
+                disabled={isGenerating}
+                className="bg-white text-black hover:bg-white/90 rounded-full"
+              >
+                {isGenerating ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />生成中...</>
+                ) : (
+                  <><Download className="mr-2 h-4 w-4" />引き継ぎガイドを生成（印刷）</>
+                )}
+              </Button>
+            </div>
+          )}
 
           {/* 1. 保管すべき情報 */}
           <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-6">

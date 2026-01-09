@@ -11,6 +11,14 @@ export const users = mysqlTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   notificationEmail: varchar("notificationEmail", { length: 320 }), // 未設定ならemailを使用
+  trustedContactEmail: varchar("trustedContactEmail", { length: 320 }), // 信頼できる通知先（配偶者等）
+  // リマインド通知設定
+  notifyEnabled: boolean("notifyEnabled").default(true).notNull(), // 通知を受け取るか
+  notifyDaysBefore: int("notifyDaysBefore").default(7).notNull(), // 何日前に通知（1,3,7,30,90,365）
+  // メール検証
+  notificationEmailVerified: boolean("notificationEmailVerified").default(false).notNull(),
+  notificationEmailVerifyToken: varchar("notificationEmailVerifyToken", { length: 64 }),
+  notificationEmailVerifyExpiresAt: timestamp("notificationEmailVerifyExpiresAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -321,3 +329,24 @@ export const interviewMessages = mysqlTable("interview_messages", {
 
 export type InterviewMessage = typeof interviewMessages.$inferSelect;
 export type InsertInterviewMessage = typeof interviewMessages.$inferInsert;
+
+/**
+ * アプリ内通知テーブル
+ * 
+ * X日前リマインド等の通知を保存
+ * - メール送信有無に関わらず必ずinboxに残る
+ * - 本文に復号情報は絶対に含めない
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // reminder_before_unlock, letter_opened, family_invite
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  meta: text("meta"), // JSON: { letterId, recipientLabel, daysRemaining }
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;

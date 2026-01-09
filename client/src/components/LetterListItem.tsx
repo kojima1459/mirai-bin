@@ -17,38 +17,19 @@ export function LetterListItem({ letter, scope }: LetterListItemProps) {
     const unlockDate = letter.unlockAt ? new Date(letter.unlockAt) : null;
     const isUnlocked = !!letter.unlockedAt;
 
-    // 宛先表示ロジック
-    const getRecipientLabel = () => {
+    // 宛先アイコン
+    const getRecipientIcon = () => {
         switch (scope) {
-            case "private":
-                return (
-                    <div className="flex items-center gap-2 font-semibold text-white">
-                        <User className="h-4 w-4 text-white/50" />
-                        <span>自分宛</span>
-                    </div>
-                );
-            case "family":
-                return (
-                    <div className="flex items-center gap-2 font-semibold text-white">
-                        <Users className="h-4 w-4 text-white/50" />
-                        <span>{letter.recipientName || "家族メンバー"}</span>
-                    </div>
-                );
-            case "link":
-                return (
-                    <div className="flex items-center gap-2 font-semibold text-white">
-                        <Link2 className="h-4 w-4 text-white/50" />
-                        <span>{letter.recipientName || "リンク共有"}</span>
-                    </div>
-                );
-            default:
-                return <span className="font-semibold text-white">{letter.recipientName}</span>;
+            case "private": return <User className="h-4 w-4 text-white/70" />;
+            case "family": return <Users className="h-4 w-4 text-white/70" />;
+            case "link": return <Link2 className="h-4 w-4 text-white/70" />;
+            default: return <User className="h-4 w-4 text-white/70" />;
         }
     };
 
-    // 日付フォーマット: yyyy/MM/dd(ddd) HH:mm
+    // 日付フォーマット: yyyy/MM/dd HH:mm
     const formattedUnlockDate = unlockDate
-        ? format(unlockDate, "yyyy/MM/dd(EEE) HH:mm", { locale: ja })
+        ? format(unlockDate, "yyyy/MM/dd HH:mm", { locale: ja })
         : "";
 
     const timeUntil = getTimeUntilUnlock(letter.unlockAt);
@@ -58,46 +39,53 @@ export function LetterListItem({ letter, scope }: LetterListItemProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="group p-5 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/[0.07] transition-all cursor-pointer"
+            className="group px-5 py-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/[0.08] transition-all cursor-pointer"
             onClick={() => navigate(`/letter/${letter.id}`)}
         >
-            {/* Row 1: Recipient + Status Badge */}
-            <div className="flex items-center justify-between mb-3">
-                {getRecipientLabel()}
+            {/* Top Row: Recipient & Status */}
+            <div className="flex items-start justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                    {getRecipientIcon()}
+                    <span className="font-semibold text-white tracking-tight">
+                        {letter.recipientName || "自分宛"}
+                    </span>
+                </div>
                 <LetterStatusBadge letter={letter} showTooltip={false} />
             </div>
 
-            {/* Row 2: Date + Relative Time */}
-            <div className="flex items-center text-sm gap-3">
+            {/* Middle Row: Date & Countdown */}
+            <div className="flex items-center gap-3 mb-1.5">
                 {unlockDate ? (
-                    <div className="flex items-center gap-2 text-white/50">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span className="tabular-nums tracking-tight font-medium font-mono">
+                    <div className="flex items-center gap-2">
+                        <span className={`tabular-nums text-sm tracking-tight font-mono ${isUnlocked ? 'text-white/40' : 'text-white/70'}`}>
                             {formattedUnlockDate}
                         </span>
                         {!isUnlocked && timeUntil && (
-                            <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-white/60 ml-1">
-                                あと{timeUntil}
+                            <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-white/50">
+                                {timeUntil}
                             </span>
                         )}
                     </div>
                 ) : (
                     <div className="text-sm text-white/40 flex items-center gap-2">
-                        <Ghost className="h-3.5 w-3.5" />
                         <span>日付指定なし</span>
                     </div>
                 )}
             </div>
 
-            {/* Row 3: Template/Meta (Optional) */}
-            {letter.templateUsed && (
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-white/5">
-                    <span className="text-xs text-white/40 bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                        {letter.templateUsed}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-white/50 transition-colors" />
+            {/* Bottom Row: Meta (Template) - subtle */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {letter.templateUsed && (
+                        <span className="text-xs text-white/30 truncate max-w-[200px]">
+                            {letter.templateUsed === "__free__" ? "自由記述" :
+                                letter.templateUsed === "__raw__" ? "音声記録" :
+                                    letter.templateUsed === "__interview__" ? "インタビュー" : letter.templateUsed}
+                        </span>
+                    )}
                 </div>
-            )}
+                <ChevronRight className="h-4 w-4 text-white/10 group-hover:text-white/30 transition-colors" />
+            </div>
         </motion.div>
     );
 }

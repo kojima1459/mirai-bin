@@ -66,7 +66,7 @@ export async function getRemindersByLetterId(db: DbInterface, letterId: number):
 /**
  * 送信すべきリマインダーを取得（scheduledAt <= now かつ sentAt IS NULL）
  */
-export async function getPendingReminders(db: DbInterface, limit: number = 100): Promise<(LetterReminder & { letter: Letter | null; user: { email: string | null; notificationEmail: string | null } | null })[]> {
+export async function getPendingReminders(db: DbInterface, limit: number = 100): Promise<(LetterReminder & { letter: Letter | null; user: { email: string | null; notificationEmail: string | null; notificationEmailVerified: boolean; trustedContactEmail: string | null } | null })[]> {
     const now = new Date();
 
     // pendingかつscheduledAt <= nowのリマインダーを取得
@@ -106,6 +106,8 @@ export async function getPendingReminders(db: DbInterface, limit: number = 100):
         const user = await db.select({
             email: users.email,
             notificationEmail: users.notificationEmail,
+            notificationEmailVerified: users.notificationEmailVerified,
+            trustedContactEmail: users.trustedContactEmail,
         }).from(users)
             .where(eq(users.id, reminder.ownerUserId))
             .limit(1);

@@ -1,14 +1,16 @@
 import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
-import { User, Play, Pause } from "lucide-react";
+import { User } from "lucide-react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { useState, useRef } from "react";
+import { AudioHeroPlayer, type AudioError } from "./AudioHeroPlayer";
 
 interface DecryptedLetterViewProps {
     content: string;
     audioUrl?: string;
+    audioBlob?: Blob;
+    audioError?: AudioError;
+    isAudioLoading?: boolean;
     recipientName?: string;
     templateUsed?: string;
     createdAt?: string;
@@ -16,28 +18,20 @@ interface DecryptedLetterViewProps {
 
 /**
  * Display view for successfully decrypted letter content
- * LP-matched dark aesthetic
+ * Audio-first design: 音声がある場合は大きな再生ボタンを最優先表示
  */
 export function DecryptedLetterView({
     content,
     audioUrl,
+    audioBlob,
+    audioError,
+    isAudioLoading = false,
     recipientName,
     templateUsed,
     createdAt,
 }: DecryptedLetterViewProps) {
-    const [isPlaying, setIsPlaying] = useState(false);
-    const audioRef = useRef<HTMLAudioElement>(null);
-
-    const toggleAudio = () => {
-        if (audioRef.current) {
-            if (isPlaying) {
-                audioRef.current.pause();
-            } else {
-                audioRef.current.play();
-            }
-            setIsPlaying(!isPlaying);
-        }
-    };
+    // 音声があるかどうか（エラーの場合も表示）
+    const hasAudio = !!audioUrl || !!audioError || isAudioLoading;
 
     return (
         <div className="min-h-screen bg-[#050505] text-white py-16 px-6">
@@ -76,60 +70,21 @@ export function DecryptedLetterView({
                     </div>
                 </motion.div>
 
-                {/* Audio Player */}
-                {audioUrl && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.4, duration: 0.5 }}
-                        className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-colors"
-                    >
-                        <div className="flex items-center gap-5">
-                            <button
-                                onClick={toggleAudio}
-                                className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform shadow-[0_0_20px_rgba(255,255,255,0.2)]"
-                            >
-                                {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-0.5" />}
-                            </button>
-                            <div className="flex-1 space-y-1">
-                                <p className="font-semibold text-white">声のメッセージ</p>
-                                <div className="flex items-center gap-2">
-                                    <div className="flex gap-0.5 h-3 items-end">
-                                        {[...Array(20)].map((_, i) => (
-                                            <motion.div
-                                                key={i}
-                                                className="w-1 bg-white/40 rounded-full"
-                                                animate={{
-                                                    height: isPlaying ? [4, 12, 4] : 4,
-                                                    opacity: isPlaying ? 1 : 0.4
-                                                }}
-                                                transition={{
-                                                    duration: 0.8,
-                                                    repeat: Infinity,
-                                                    delay: i * 0.05,
-                                                    ease: "easeInOut"
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
-                                    <p className="text-xs text-white/40 ml-2">{isPlaying ? "再生中..." : "タップして再生"}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <audio
-                            ref={audioRef}
-                            src={audioUrl}
-                            onEnded={() => setIsPlaying(false)}
-                            className="hidden"
-                        />
-                    </motion.div>
+                {/* Audio Hero Player - 音声がある場合は優先表示 */}
+                {hasAudio && (
+                    <AudioHeroPlayer
+                        audioUrl={audioUrl}
+                        audioBlob={audioBlob}
+                        isLoading={isAudioLoading}
+                        error={audioError}
+                    />
                 )}
 
                 {/* Letter Content */}
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.6, duration: 0.8 }}
+                    transition={{ delay: hasAudio ? 0.6 : 0.4, duration: 0.8 }}
                     className="bg-white/5 border border-white/5 rounded-2xl p-8 md:p-12 shadow-2xl backdrop-blur-sm"
                 >
                     <div className="text-white/90 whitespace-pre-wrap leading-[2] text-base md:text-lg font-serif tracking-wide">

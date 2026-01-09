@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
 import { useAuth as useClientAuth } from "@/contexts/AuthContext";
+import { NotificationBell } from "@/components/NotificationBell";
 
 // アイコンマップ（拡張版）
 const iconMap: Record<string, React.ReactNode> = {
@@ -219,6 +220,7 @@ export default function Home() {
               <Link href="/my-letters">
                 <span className="cursor-pointer hover:opacity-70 transition-opacity">マイレター</span>
               </Link>
+              <NotificationBell />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="cursor-pointer hover:opacity-70 transition-opacity flex items-center gap-1">
@@ -244,7 +246,7 @@ export default function Home() {
                 <span className="cursor-pointer hover:opacity-70 transition-opacity">Login</span>
               </Link>
               <Link href="/create">
-                <span className="cursor-pointer bg-white text-black px-4 py-2 rounded-full hover:bg-white/90 transition-colors">Start</span>
+                <span className="cursor-pointer bg-white text-black px-4 py-2 rounded-full hover:bg-white/90 transition-colors">今すぐ作成</span>
               </Link>
             </>
           )}
@@ -550,7 +552,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="text-sm text-white/40 space-y-4">
             <div className="flex justify-center gap-6 flex-wrap">
-              <Link href="/lp" className="hover:text-white transition-colors">About</Link>
+              <Link href="/lp" className="hover:text-white transition-colors">未来便について</Link>
               <Link href="/how-to-use" className="hover:text-white transition-colors">使い方</Link>
               <Link href="/faq" className="hover:text-white transition-colors">FAQ</Link>
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>

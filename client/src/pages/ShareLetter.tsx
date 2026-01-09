@@ -6,6 +6,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { ShareStateView } from "@/components/share/ShareStateView";
 import { UnlockForm } from "@/components/share/UnlockForm";
 import { DecryptedLetterView } from "@/components/share/DecryptedLetterView";
+import { EmergencyUnlockDialog } from "@/components/share/EmergencyUnlockDialog";
 import { deriveShareLetterState, ShareLetterState } from "@/lib/shareLetterState";
 import { AnimatePresence } from "framer-motion";
 import { useLetterDecryption } from "@/hooks/useLetterDecryption";
@@ -18,18 +19,21 @@ export default function ShareLetter() {
 
   // UI State
   const [unlockCode, setUnlockCode] = useState("");
+  const [showEmergencyDialog, setShowEmergencyDialog] = useState(false);
 
   // Custom Hook for Logic Refactor
   const {
     decrypt,
+    decryptWithBackup,
     isDecrypting,
     error: decryptError,
+    backupError,
     decryptedContent,
     resetState
   } = useLetterDecryption({
     shareToken,
     onSuccess: () => {
-      // Optional: Could trigger confetti or analytics here
+      setShowEmergencyDialog(false);
     }
   });
 
@@ -90,6 +94,12 @@ export default function ShareLetter() {
     }
   };
 
+  const handleEmergencyUnlock = (backupShare: string) => {
+    if (data) {
+      decryptWithBackup(backupShare, data);
+    }
+  };
+
   const handleRetry = () => {
     if (state === "CODE_INVALID") {
       resetState();
@@ -111,35 +121,59 @@ export default function ShareLetter() {
   }
 
   return (
-    <AnimatePresence mode="wait">
-      {decryptedContent ? (
-        <DecryptedLetterView
-          key="decrypted"
-          content={decryptedContent.content}
-          audioUrl={decryptedContent.audioUrl}
-          recipientName={data?.letter?.recipientName ?? undefined}
-          templateUsed={data?.letter?.templateUsed ?? undefined}
-          createdAt={data?.letter?.createdAt}
-        />
-      ) : state === "READY_TO_UNLOCK" ? (
-        <UnlockForm
-          key="unlock"
-          recipientName={data?.letter?.recipientName ?? undefined}
-          templateUsed={data?.letter?.templateUsed ?? undefined}
-          unlockCode={unlockCode}
-          isDecrypting={isDecrypting}
-          onUnlockCodeChange={setUnlockCode}
-          onSubmit={handleUnlock}
-          decryptionError={decryptError === "AUTH"}
-        />
-      ) : (
-        <ShareStateView
-          key="state"
-          state={state}
-          unlockAt={data?.letter?.unlockAt}
-          onRetry={handleRetry}
-        />
-      )}
-    </AnimatePresence>
+    <>
+      <AnimatePresence mode="wait">
+        {decryptedContent ? (
+          <DecryptedLetterView
+            key="decrypted"
+            content={decryptedContent.content}
+            audioUrl={decryptedContent.audioUrl}
+            audioBlob={decryptedContent.audioBlob}
+            audioError={decryptedContent.audioError}
+            recipientName={data?.letter?.recipientName ?? undefined}
+            templateUsed={data?.letter?.templateUsed ?? undefined}
+            createdAt={data?.letter?.createdAt}
+          />
+        ) : state === "READY_TO_UNLOCK" ? (
+          <div key="unlock" className="min-h-screen bg-[#050505]">
+            <UnlockForm
+              recipientName={data?.letter?.recipientName ?? undefined}
+              templateUsed={data?.letter?.templateUsed ?? undefined}
+              unlockCode={unlockCode}
+              isDecrypting={isDecrypting}
+              onUnlockCodeChange={setUnlockCode}
+              onSubmit={handleUnlock}
+              decryptionError={decryptError === "AUTH"}
+            />
+            {/* 緊急復号リンク */}
+            <div className="text-center pb-12">
+              <button
+                onClick={() => setShowEmergencyDialog(true)}
+                className="text-sm text-white/40 hover:text-white/60 transition-colors underline underline-offset-4"
+              >
+                解錠コードを忘れた場合
+              </button>
+            </div>
+          </div>
+        ) : (
+          <ShareStateView
+            key="state"
+            state={state}
+            unlockAt={data?.letter?.unlockAt}
+            onRetry={handleRetry}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Emergency Unlock Dialog */}
+      <EmergencyUnlockDialog
+        isOpen={showEmergencyDialog}
+        onClose={() => setShowEmergencyDialog(false)}
+        onUnlock={handleEmergencyUnlock}
+        isDecrypting={isDecrypting}
+        error={backupError}
+      />
+    </>
   );
 }
+

@@ -40,8 +40,8 @@ export function getLetterStatus(letter: LetterData): LetterStatusInfo {
             status: 'unlocked',
             badge: {
                 text: '開封済み',
-                variant: 'default',
-                className: 'bg-green-100 text-green-700 border-green-200'
+                variant: 'outline',
+                className: 'bg-white/5 text-white/40 border-white/5'
             },
             description: '既に開封されています',
             urgency: 'low'
@@ -55,7 +55,7 @@ export function getLetterStatus(letter: LetterData): LetterStatusInfo {
             badge: {
                 text: '下書き',
                 variant: 'outline',
-                className: 'text-muted-foreground border-muted'
+                className: 'bg-white/5 text-white/30 border-white/5'
             },
             description: '編集中',
             urgency: 'low'
@@ -67,11 +67,11 @@ export function getLetterStatus(letter: LetterData): LetterStatusInfo {
         return {
             status: 'sealed_not_shared',
             badge: {
-                text: '封緘済み',
-                variant: 'default',
-                className: 'bg-blue-100 text-blue-700 border-blue-200'
+                text: 'リンク未発行',
+                variant: 'outline',
+                className: 'bg-white/10 text-white/70 border-white/10 font-medium'
             },
-            description: '共有待ち',
+            description: '相手にリンクを共有してください',
             urgency: 'medium'
         };
     }
@@ -82,8 +82,8 @@ export function getLetterStatus(letter: LetterData): LetterStatusInfo {
             status: 'ready_to_unlock',
             badge: {
                 text: '開封可能',
-                variant: 'default',
-                className: 'bg-green-50 text-green-700 border-green-300 animate-pulse'
+                variant: 'outline',
+                className: 'bg-white/20 text-white border-white/30 font-bold animate-pulse'
             },
             description: '今すぐ開封できます',
             urgency: 'high'
@@ -95,11 +95,11 @@ export function getLetterStatus(letter: LetterData): LetterStatusInfo {
         return {
             status: 'awaiting_unlock',
             badge: {
-                text: '開封待ち',
-                variant: 'default',
-                className: 'bg-amber-100 text-amber-700 border-amber-200'
+                text: 'お預かり中',
+                variant: 'outline',
+                className: 'bg-white/5 text-white/50 border-white/10'
             },
-            description: '開封日まで待機中',
+            description: '開封日時まで大切にお預かりします',
             urgency: 'low'
         };
     }
@@ -109,8 +109,8 @@ export function getLetterStatus(letter: LetterData): LetterStatusInfo {
         status: 'sealed_not_shared',
         badge: {
             text: '封緘済み',
-            variant: 'default',
-            className: 'bg-blue-100 text-blue-700 border-blue-200'
+            variant: 'outline',
+            className: 'bg-white/5 text-white/50 border-white/5'
         },
         description: '共有済み',
         urgency: 'low'

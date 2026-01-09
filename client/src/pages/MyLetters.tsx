@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { LetterListItem } from "@/components/LetterListItem";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InviteFamilyDialog } from "@/components/InviteFamilyDialog";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { useLocation, useSearch, Link } from "wouter";
 import {
@@ -20,13 +23,15 @@ import {
   Users,
   Link2,
   Filter,
-  Settings
+  Settings,
+  Search,
+  ArrowUpDown
 } from "lucide-react";
 
 type LetterScope = "private" | "family" | "link";
 
 export default function MyLetters() {
-  const { loading: authLoading, isAuthenticated } = useAuth();
+  const { loading: authLoading, isAuthenticated, user } = useAuth();
   const [location, navigate] = useLocation();
   const search = useSearch();
 
@@ -42,6 +47,42 @@ export default function MyLetters() {
 
   const [activeTab, setActiveTabRaw] = useState<LetterScope>(getTabFromUrl());
   const [showDraftsOnly, setShowDraftsOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+
+  // Family creation state
+  const [familyName, setFamilyName] = useState("");
+  const [isCreatingFamily, setIsCreatingFamily] = useState(false);
+
+  // Family status query
+  const { data: familyMemberships, isLoading: familyLoading, refetch: refetchFamily } =
+    trpc.family.getMyFamily.useQuery(undefined, { enabled: !!user });
+  const myFamily = familyMemberships?.[0];
+
+  // Family create mutation
+  const createFamilyMutation = trpc.family.create.useMutation({
+    onSuccess: () => {
+      toast.success("家族グループを作成しました");
+      setFamilyName("");
+      refetchFamily();
+    },
+    onError: (error) => {
+      toast.error("作成に失敗しました", { description: error.message });
+    },
+  });
+
+  const handleCreateFamily = async () => {
+    if (!familyName.trim()) {
+      toast.error("グループ名を入力してください");
+      return;
+    }
+    setIsCreatingFamily(true);
+    try {
+      await createFamilyMutation.mutateAsync({ name: familyName.trim() });
+    } finally {
+      setIsCreatingFamily(false);
+    }
+  };
 
   // URL Sync Logic
   useEffect(() => {
@@ -85,8 +126,21 @@ export default function MyLetters() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-        <Loader2 className="h-8 w-8 animate-spin text-white/20" />
+      <div className="min-h-screen bg-[#050505] text-white">
+        <header className="fixed top-0 w-full z-50 px-6 py-5 flex justify-between items-center border-b border-white/5 bg-[#050505]/80 backdrop-blur-md">
+          <Skeleton className="h-8 w-32 bg-white/5" />
+          <Skeleton className="h-10 w-28 rounded-full bg-white/5" />
+        </header>
+        <main className="pt-24 pb-12 px-6 max-w-3xl mx-auto">
+          <div className="space-y-8">
+            <Skeleton className="h-12 w-full rounded-xl bg-white/5" />
+            <div className="space-y-4">
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} className="h-24 w-full rounded-xl bg-white/5" />
+              ))}
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -106,40 +160,113 @@ export default function MyLetters() {
         break;
     }
 
+    // Filter by draft status (Private only)
     if (scope === "private" && showDraftsOnly) {
-      return rawLetters.filter(l => l.status === "draft");
+      rawLetters = rawLetters.filter(l => l.status === "draft");
     }
-    return rawLetters;
+
+    // Filter by Search Query
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      rawLetters = rawLetters.filter(l =>
+        (l.recipientName && l.recipientName.toLowerCase().includes(q)) ||
+        (l.templateUsed && l.templateUsed.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort
+    return [...rawLetters].sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+    });
   };
 
-  const renderEmptyState = (message: string, showFamilyCTA = false) => (
-    <div className="py-20 text-center">
-      <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-6">
-        <Mail className="h-8 w-8 text-white/50" />
-      </div>
-      <h2 className="text-xl font-semibold mb-3 text-white">{message}</h2>
-      <p className="text-white/40 mb-8 max-w-sm mx-auto">
-        {showFamilyCTA
-          ? "家族グループを作成して、メンバーと手紙を共有しましょう"
-          : "大切な人への想いを、未来に届けましょう"}
-      </p>
-      {showFamilyCTA ? (
-        <div className="flex flex-col gap-3 items-center">
-          <Button onClick={() => navigate("/family")} className="bg-white text-black hover:bg-white/90 rounded-full">
-            <Users className="mr-2 h-4 w-4" />
-            家族グループを管理
-          </Button>
-          <Button variant="ghost" onClick={() => navigate("/create")} className="text-white/50 hover:text-white hover:bg-white/5 rounded-full">
+  const renderFamilyEmptyState = () => {
+    // No family - show inline creation
+    if (!myFamily) {
+      return (
+        <div className="py-16 text-center space-y-8">
+          <div className="w-20 h-20 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Users className="h-8 w-8 text-white/50" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tighter mb-3">家族グループを作成</h2>
+            <p className="text-white/50 max-w-sm mx-auto leading-relaxed">
+              家族グループを作って、メンバーと手紙を共有しましょう。
+            </p>
+          </div>
+          <div className="max-w-xs mx-auto space-y-4">
+            <Input
+              placeholder="グループ名（例: 田中家）"
+              value={familyName}
+              onChange={(e) => setFamilyName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateFamily()}
+              className="h-14 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-white/30 rounded-xl text-center"
+            />
+            <Button
+              onClick={handleCreateFamily}
+              disabled={isCreatingFamily}
+              className="w-full bg-white text-black hover:bg-white/90 rounded-full font-semibold h-14"
+            >
+              {isCreatingFamily ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />作成中...</>
+              ) : (
+                <><Users className="mr-2 h-4 w-4" />グループを作成</>
+              )}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Family exists but no letters
+    return (
+      <div className="py-24 text-center">
+        <div className="relative w-24 h-24 mx-auto mb-8 group">
+          <div className="absolute inset-0 bg-white/5 rounded-3xl rotate-6 transition-transform group-hover:rotate-12" />
+          <div className="absolute inset-0 bg-white/5 rounded-3xl -rotate-6 transition-transform group-hover:-rotate-12" />
+          <div className="relative w-full h-full bg-[#1a1a1a] border border-white/10 rounded-2xl flex items-center justify-center shadow-2xl">
+            <Users className="h-10 w-10 text-white/40" />
+          </div>
+        </div>
+        <h2 className="text-xl font-bold mb-4 text-white tracking-tight">家族への手紙はまだありません</h2>
+        <p className="text-white/40 mb-10 max-w-sm mx-auto leading-relaxed">
+          大切な家族への想いを、未来のその日までお届けします
+        </p>
+        <div className="flex flex-col gap-4 items-center w-full max-w-xs mx-auto">
+          <Button onClick={() => navigate("/create")} className="w-full h-12 bg-white text-black hover:bg-white/90 rounded-full font-semibold">
             <PenLine className="mr-2 h-4 w-4" />
-            手紙を書く
+            家族への手紙を書く
+          </Button>
+          <Button variant="ghost" onClick={() => navigate("/family")} className="w-full text-white/50 hover:text-white hover:bg-white/5 rounded-full">
+            <Users className="mr-2 h-4 w-4" />
+            メンバーを招待
           </Button>
         </div>
-      ) : (
-        <Button onClick={() => navigate("/create")} className="bg-white text-black hover:bg-white/90 rounded-full">
-          <PenLine className="mr-2 h-4 w-4" />
-          手紙を書く
-        </Button>
-      )}
+      </div>
+    );
+  };
+
+  const renderEmptyState = (message: string) => (
+    <div className="py-24 text-center">
+      <div className="relative w-24 h-24 mx-auto mb-8 group">
+        <div className="absolute inset-0 bg-white/5 rounded-3xl rotate-6 transition-transform group-hover:rotate-12" />
+        <div className="absolute inset-0 bg-white/5 rounded-3xl -rotate-6 transition-transform group-hover:-rotate-12" />
+        <div className="relative w-full h-full bg-[#1a1a1a] border border-white/10 rounded-2xl flex items-center justify-center shadow-2xl">
+          <Mail className="h-10 w-10 text-white/40" />
+        </div>
+      </div>
+
+      <h2 className="text-xl font-bold mb-4 text-white tracking-tight">{message}</h2>
+      <p className="text-white/40 mb-10 max-w-sm mx-auto leading-relaxed">
+        大切な人への想いを、未来のその日までお届けします
+      </p>
+
+      <Button onClick={() => navigate("/create")} className="h-12 px-8 bg-white text-black hover:bg-white/90 rounded-full font-semibold shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all">
+        <PenLine className="mr-2 h-4 w-4" />
+        未来への手紙を書く
+      </Button>
     </div>
   );
 
@@ -171,6 +298,26 @@ export default function MyLetters() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
+            {/* Search & Filter Bar */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+                <Input
+                  placeholder="宛名やテンプレートで検索..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-11 bg-white/5 border-white/10 text-white placeholder:text-white/20 rounded-xl focus:bg-white/10 transition-all"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+                className="h-11 px-4 bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10 rounded-xl gap-2 shrink-0"
+              >
+                <ArrowUpDown className="h-4 w-4" />
+                {sortOrder === "desc" ? "新しい順" : "古い順"}
+              </Button>
+            </div>
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-8 bg-white/5 border border-white/10 rounded-xl p-1 h-auto">
                 <TabsTrigger
@@ -197,6 +344,25 @@ export default function MyLetters() {
                   <span className="sm:hidden">リンク</span>
                 </TabsTrigger>
               </TabsList>
+
+              {/* Scope Description */}
+              <div className="mb-6 text-center">
+                {activeTab === "private" && (
+                  <p className="text-sm text-white/50">
+                    <span className="text-white/70 font-medium">自分だけ</span>が見られる手紙です
+                  </p>
+                )}
+                {activeTab === "family" && (
+                  <p className="text-sm text-white/50">
+                    <span className="text-white/70 font-medium">家族グループ</span>のメンバーに共有されます
+                  </p>
+                )}
+                {activeTab === "link" && (
+                  <p className="text-sm text-white/50">
+                    <span className="text-white/70 font-medium">URLと解錠コード</span>を知る人が開封できます
+                  </p>
+                )}
+              </div>
 
               {/* Filter Toggle for Private Tab */}
               {activeTab === "private" && (
@@ -249,7 +415,7 @@ export default function MyLetters() {
                       ))}
                     </div>
                   ) : (
-                    renderEmptyState("家族への手紙はまだありません", true)
+                    renderFamilyEmptyState()
                   )}
                 </TabsContent>
 

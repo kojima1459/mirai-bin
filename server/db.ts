@@ -111,6 +111,28 @@ export async function updateUserEmail(userId: number, newEmail: string): Promise
   await db.update(users).set({ email: newEmail }).where(eq(users.id, userId));
 }
 
+export async function updateUserTrustedContactEmail(userId: number, trustedContactEmail: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(users).set({ trustedContactEmail }).where(eq(users.id, userId));
+}
+
+export async function updateUserNotificationSettings(
+  userId: number,
+  notifyEnabled: boolean,
+  notifyDaysBefore: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(users).set({ notifyEnabled, notifyDaysBefore }).where(eq(users.id, userId));
+}
+
 export async function getUserNotificationEmail(userId: number): Promise<string | null> {
   const db = await getDb();
   if (!db) {
@@ -755,7 +777,7 @@ export async function getRemindersByLetterId(letterId: number): Promise<LetterRe
 /**
  * 送信すべきリマインダーを取得（scheduledAt <= now かつ sentAt IS NULL）
  */
-export async function getPendingReminders(limit: number = 100): Promise<(LetterReminder & { letter: Letter | null; user: { email: string | null; notificationEmail: string | null } | null })[]> {
+export async function getPendingReminders(limit: number = 100): Promise<(LetterReminder & { letter: Letter | null; user: { email: string | null; notificationEmail: string | null; notificationEmailVerified: boolean; trustedContactEmail: string | null } | null })[]> {
   const db = await getDb();
   if (!db) return [];
   return ReminderLogic.getPendingReminders(db, limit);

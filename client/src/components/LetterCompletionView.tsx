@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { useLocation } from "wouter";
+import { ShareChecklistGate, REQUIRED_CHECKLIST_ITEMS } from "@/components/share/ShareChecklistGate";
 
 interface LetterCompletionViewProps {
     recipientName?: string;
@@ -50,6 +51,24 @@ export function LetterCompletionView({
 }: LetterCompletionViewProps) {
     const [, navigate] = useLocation();
     const [activeStep, setActiveStep] = useState<string>("step-1");
+    // Share safety checklist state
+    const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+    const isGatePassed = REQUIRED_CHECKLIST_ITEMS.every((id) => checkedItems.has(id));
+    // 1-time unlock code reveal state
+    const [codeRevealed, setCodeRevealed] = useState(false);
+    const [maskedCode, setMaskedCode] = useState("••••••••••••");
+
+    const handleCheckItem = (item: string, checked: boolean) => {
+        setCheckedItems((prev) => {
+            const next = new Set(prev);
+            if (checked) {
+                next.add(item);
+            } else {
+                next.delete(item);
+            }
+            return next;
+        });
+    };
 
     const handleCopyUnlockCode = async () => {
         await navigator.clipboard.writeText(unlockCode);
@@ -86,41 +105,41 @@ export function LetterCompletionView({
                         <span className="bg-white/10 text-white/90 border border-white/10 px-3 py-1 rounded-full">{templateName}</span>
                     )}
                     {unlockDate && (
-                        <span className="bg-amber-500/20 text-amber-200 border border-amber-500/20 px-3 py-1 rounded-full">
-                            {format(unlockDate, "yyyy/M/d", { locale: ja })} {unlockTime} 開封
+                        <span className="bg-amber-500/20 text-amber-200 border border-amber-500/20 px-3 py-1 rounded-full font-mono">
+                            {format(unlockDate, "yyyy/MM/dd", { locale: ja })} {unlockTime} 開封
                         </span>
                     )}
                 </div>
 
-                {/* Main CTA: PDF Export */}
-                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-6 text-center space-y-4">
-                    <div className="flex items-center justify-center gap-2 text-indigo-300 font-semibold">
+                {/* Share Safety Checklist Gate */}
+                <ShareChecklistGate
+                    checkedItems={checkedItems}
+                    onCheckItem={handleCheckItem}
+                />
+
+                {/* Main CTA: PDF Export - GATED */}
+                <div className={`border rounded-xl p-6 text-center space-y-4 transition-all ${isGatePassed ? "bg-indigo-500/10 border-indigo-500/20" : "bg-white/5 border-white/10 opacity-60"}`}>
+                    <div className={`flex items-center justify-center gap-2 font-semibold ${isGatePassed ? "text-indigo-300" : "text-white/50"}`}>
                         <FileText className="h-5 w-5" />
-                        まずはPDFを保存
+                        {isGatePassed ? "まずはPDFを保存" : "↑ 上の確認を完了してください"}
                     </div>
-                    <p className="text-sm text-indigo-200/60">
+                    <p className="text-sm text-white/40">
                         リンク・コード・バックアップを3ページに分けて出力します
                     </p>
                     <Button
                         size="lg"
-                        className="w-full bg-indigo-500 hover:bg-indigo-400 text-white border-0 font-bold shadow-lg shadow-indigo-500/20"
+                        className="w-full bg-indigo-500 hover:bg-indigo-400 text-white border-0 font-bold shadow-lg shadow-indigo-500/20 disabled:bg-white/10 disabled:text-white/30 disabled:shadow-none"
                         onClick={onExportPDF}
-                        disabled={!shareUrl}
+                        disabled={!shareUrl || !isGatePassed}
                     >
                         <FileText className="mr-2 h-5 w-5" />
                         PDFを印刷/保存
                     </Button>
-                    {!shareUrl && (
+                    {!shareUrl && isGatePassed && (
                         <p className="text-xs text-white/30">
                             共有リンクを生成してからPDFを出力できます
                         </p>
                     )}
-                </div>
-
-                {/* Warning */}
-                <div className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-300">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span><strong>リンクとコードを同じスクショに入れない</strong></span>
                 </div>
 
                 {/* Accordion Steps */}
@@ -173,7 +192,7 @@ export function LetterCompletionView({
                                             variant="outline"
                                             className="flex-1 bg-[#06C755]/10 hover:bg-[#06C755]/20 text-[#06C755] border-[#06C755]/30 h-10"
                                             onClick={() => {
-                                                const text = `大切なあなたへの手紙が届いています。${unlockDate ? `\n開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}` : ""}\n\n※解錠コードは別途お伝えします`;
+                                                const text = `大切なあなたへの手紙が届いています。${unlockDate ? `\n開封予定: ${format(unlockDate, "yyyy/MM/dd")} ${unlockTime}` : ""}\n\n※解錠コードは別途お伝えします`;
                                                 window.open(`https://line.me/R/share?text=${encodeURIComponent(text + "\n" + shareUrl)}`, "_blank");
                                             }}
                                         >
@@ -185,7 +204,7 @@ export function LetterCompletionView({
                                             className="flex-1 bg-transparent hover:bg-white/5 text-white border-white/10 h-10"
                                             onClick={() => {
                                                 const subject = `大切なあなたへの手紙`;
-                                                const body = `大切なあなたへの手紙が届いています。\n\n${unlockDate ? `開封可能日: ${format(unlockDate, "yyyy年M月d日", { locale: ja })}\n\n` : ""}以下のリンクからご覧ください。\n${shareUrl}\n\n※解錠コードは別途お伝えします`;
+                                                const body = `大切なあなたへの手紙が届いています。\n\n${unlockDate ? `開封予定: ${format(unlockDate, "yyyy/MM/dd")} ${unlockTime}\n\n` : ""}以下のリンクからご覧ください。\n${shareUrl}\n\n※解錠コードは別途お伝えします`;
                                                 window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                                             }}
                                         >
@@ -206,7 +225,7 @@ export function LetterCompletionView({
                         </AccordionContent>
                     </AccordionItem>
 
-                    {/* Step 2: Send Unlock Code */}
+                    {/* Step 2: Send Unlock Code - 1-TIME REVEAL */}
                     <AccordionItem value="step-2" className="bg-white/5 border border-white/5 rounded-xl overflow-hidden px-0">
                         <AccordionTrigger className="px-4 py-4 hover:no-underline text-white hover:bg-white/5 transition-colors">
                             <div className="flex items-center gap-3">
@@ -214,22 +233,49 @@ export function LetterCompletionView({
                                     2
                                 </div>
                                 <span className="font-medium">解錠コードを別経路で送る</span>
+                                {codeRevealed && <span className="text-xs text-amber-400 ml-2">✓ 表示済み</span>}
                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-4 pt-2 space-y-4 border-t border-white/5">
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    value={unlockCode}
-                                    readOnly
-                                    className="font-mono text-center text-lg tracking-widest bg-black/40 border-white/10 text-indigo-300 h-14"
-                                />
-                                <Button size="icon" variant="outline" onClick={handleCopyUnlockCode} className="bg-transparent border-white/10 text-white hover:bg-white/10 h-14 w-14 shrink-0">
-                                    <Copy className="h-5 w-5" />
-                                </Button>
-                            </div>
-                            <p className="text-xs text-white/50 text-center">
-                                リンクとは<strong>別のメッセージ</strong>で送ってください
-                            </p>
+                            {!codeRevealed ? (
+                                <div className="space-y-4">
+                                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 space-y-2">
+                                        <p className="text-sm text-amber-200 font-semibold flex items-center gap-2">
+                                            <AlertTriangle className="h-4 w-4" />
+                                            1回限りの表示
+                                        </p>
+                                        <p className="text-xs text-amber-200/70">
+                                            セキュリティのため、解錠コードはこの端末で1回のみ表示できます。<br />
+                                            表示したらすぐにコピー/共有してください。
+                                        </p>
+                                    </div>
+                                    <Button
+                                        onClick={() => setCodeRevealed(true)}
+                                        className="w-full bg-white text-black hover:bg-white/90 h-12"
+                                    >
+                                        解錠コードを表示する（1回限り）
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={unlockCode}
+                                            readOnly
+                                            className="font-mono text-center text-lg tracking-widest bg-black/40 border-white/10 text-indigo-300 h-14"
+                                        />
+                                        <Button size="icon" variant="outline" onClick={handleCopyUnlockCode} className="bg-transparent border-white/10 text-white hover:bg-white/10 h-14 w-14 shrink-0">
+                                            <Copy className="h-5 w-5" />
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-white/50 text-center">
+                                        リンクとは<strong>別のメッセージ</strong>で送ってください
+                                    </p>
+                                    <p className="text-xs text-amber-400/70 text-center">
+                                        ※ このコードは画面を閉じると再表示できません。PDFにも記載されています。
+                                    </p>
+                                </div>
+                            )}
                         </AccordionContent>
                     </AccordionItem>
 
