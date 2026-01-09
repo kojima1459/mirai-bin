@@ -1,7 +1,8 @@
 // 未来便 Service Worker
-const CACHE_NAME = 'mirai-bin-v1';
-const STATIC_CACHE_NAME = 'mirai-bin-static-v1';
-const DYNAMIC_CACHE_NAME = 'mirai-bin-dynamic-v1';
+const BUILD_ID = '__BUILD_ID__';
+const CACHE_NAME = `mirai-bin-${BUILD_ID}`;
+const STATIC_CACHE_NAME = `mirai-bin-static-${BUILD_ID}`;
+const DYNAMIC_CACHE_NAME = `mirai-bin-dynamic-${BUILD_ID}`;
 
 // 静的アセット（事前キャッシュ）
 const STATIC_ASSETS = [

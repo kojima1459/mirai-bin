@@ -24,6 +24,15 @@ var init_env = __esm({
       forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
       geminiApiKey: process.env.GEMINI_API_KEY ?? "AIzaSyBhm0YrR2ju8PMHKkU2F5_oSaSCoPPo8Qo"
     };
+    if (ENV.isProduction) {
+      const missingEnvs = [];
+      if (!ENV.databaseUrl) missingEnvs.push("DATABASE_URL");
+      if (!ENV.cookieSecret) missingEnvs.push("JWT_SECRET");
+      if (!ENV.oAuthServerUrl) missingEnvs.push("OAUTH_SERVER_URL");
+      if (missingEnvs.length > 0) {
+        throw new Error(`[Server] Critical environment variables missing: ${missingEnvs.join(", ")}`);
+      }
+    }
   }
 });
 
@@ -128,13 +137,13 @@ __export(vite_exports, {
 import fs2 from "fs";
 import { nanoid as nanoid2 } from "nanoid";
 import path2 from "path";
-import { createServer as createViteServer } from "vite";
 async function setupVite(app2, server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
     allowedHosts: true
   };
+  const { createServer: createViteServer } = await import("vite");
   const vite = await createViteServer({
     configFile: path2.resolve(import.meta.dirname, "../../vite.config.ts"),
     server: serverOptions,

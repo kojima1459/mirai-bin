@@ -3,7 +3,7 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
+
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -11,6 +11,8 @@ export async function setupVite(app: Express, server: Server) {
     hmr: { server },
     allowedHosts: true as const,
   };
+
+  const { createServer: createViteServer } = await import("vite");
 
   const vite = await createViteServer({
     configFile: path.resolve(import.meta.dirname, "../../vite.config.ts"),

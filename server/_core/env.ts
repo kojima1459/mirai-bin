@@ -9,3 +9,14 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "AIzaSyBhm0YrR2ju8PMHKkU2F5_oSaSCoPPo8Qo",
 };
+
+if (ENV.isProduction) {
+  const missingEnvs: string[] = [];
+  if (!ENV.databaseUrl) missingEnvs.push("DATABASE_URL");
+  if (!ENV.cookieSecret) missingEnvs.push("JWT_SECRET");
+  if (!ENV.oAuthServerUrl) missingEnvs.push("OAUTH_SERVER_URL");
+
+  if (missingEnvs.length > 0) {
+    throw new Error(`[Server] Critical environment variables missing: ${missingEnvs.join(", ")}`);
+  }
+}

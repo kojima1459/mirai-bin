@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 
 import { motion } from "framer-motion";
-import { 
-  Cake, GraduationCap, Heart, Mail, Loader2, PenLine, 
+import {
+  Cake, GraduationCap, Heart, Mail, Loader2, PenLine,
   School, BookOpen, Star, Briefcase, Baby, HandHeart, FileEdit,
   Shield, Lock, FileCheck, Settings, ChevronDown, Sparkles,
   Sun, Wallet, Map, CloudRain, Frown, Angry, Users, ThumbsDown,
@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
+import { useAuth as useClientAuth } from "@/contexts/AuthContext";
 
 // アイコンマップ（拡張版）
 const iconMap: Record<string, React.ReactNode> = {
@@ -87,6 +88,15 @@ const staggerContainer = {
 
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { signIn } = useClientAuth();
+  const handleLogin = async () => {
+    try {
+      await signIn();
+    } catch (e) {
+      console.error("Login trigger failed:", e);
+      alert("ログインに失敗しました。もう一度お試しください。");
+    }
+  };
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -101,7 +111,7 @@ export default function Home() {
   const filteredTemplates = useMemo(() => {
     if (!templates) return [];
     return templates.filter(t => {
-      const matchesSearch = searchQuery === "" || 
+      const matchesSearch = searchQuery === "" ||
         t.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.subtitle?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.description?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -148,16 +158,16 @@ export default function Home() {
   };
 
   // テンプレートアコーディオンアイテム
-  const TemplateAccordionItem = ({ template, isRecommended = false }: { 
-    template: NonNullable<typeof templates>[number]; 
+  const TemplateAccordionItem = ({ template, isRecommended = false }: {
+    template: NonNullable<typeof templates>[number];
     isRecommended?: boolean;
   }) => {
     const colors = categoryColors[template.category || "milestone"] || categoryColors.milestone;
     const recordingGuide = parseRecordingGuide(template.recordingGuide);
 
     return (
-      <AccordionItem 
-        value={template.name} 
+      <AccordionItem
+        value={template.name}
         className={`border rounded-lg mb-3 ${colors.border} ${colors.bg} overflow-hidden`}
       >
         {/* モバイル最適化: タップ領域で44px以上、パディング拡大 */}
@@ -229,23 +239,21 @@ export default function Home() {
                   </Button>
                 </Link>
               ) : (
-                <a href={"/login"}>
-                  <Button className="w-full h-12 md:h-10 text-base md:text-sm">
-                    ログインして手紙を書く
-                  </Button>
-                </a>
+                <Button onClick={handleLogin} className="w-full h-12 md:h-10 text-base md:text-sm">
+                  ログインして手紙を書く
+                </Button>
               )}
             </div>
           </div>
         </AccordionContent>
-      </AccordionItem>
+      </AccordionItem >
     );
   };
 
   return (
     <div className="min-h-screen">
       {/* ヘッダー */}
-      <motion.header 
+      <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -253,7 +261,7 @@ export default function Home() {
       >
         <div className="container flex h-16 items-center justify-between">
           <Link href="/">
-            <motion.div 
+            <motion.div
               className="flex items-center gap-2 cursor-pointer"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -298,20 +306,18 @@ export default function Home() {
                 </DropdownMenu>
               </>
             ) : (
-              <a href={"/login"}>
-                <Button>ログイン</Button>
-              </a>
+              <Button onClick={handleLogin}>ログイン</Button>
             )}
           </div>
         </div>
-      </motion.header>
+      </motion.header >
 
       {/* ヒーローセクション */}
-      <section className="py-20 md:py-32 relative overflow-hidden">
+      < section className="py-20 md:py-32 relative overflow-hidden" >
         <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50" />
-        <motion.div 
+        <motion.div
           className="absolute inset-0 opacity-30"
-          animate={{ 
+          animate={{
             background: [
               "radial-gradient(circle at 20% 50%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)",
               "radial-gradient(circle at 80% 50%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)",
@@ -320,7 +326,7 @@ export default function Home() {
           }}
           transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
         />
-        
+
         <div className="container text-center relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -337,9 +343,9 @@ export default function Home() {
                 <Mail className="h-10 w-10 text-white" />
               </div>
             </motion.div>
-            
+
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-              <motion.span 
+              <motion.span
                 className="text-primary inline-block"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -355,7 +361,7 @@ export default function Home() {
                 の大切な人へ
               </motion.span>
               <br />
-              <motion.span 
+              <motion.span
                 className="text-primary inline-block"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -371,8 +377,8 @@ export default function Home() {
                 の想いを届ける
               </motion.span>
             </h1>
-            
-            <motion.p 
+
+            <motion.p
               className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -382,7 +388,7 @@ export default function Home() {
               <br />
               暗号化して安全に保管し、未来の特別な日に届けます。
             </motion.p>
-            
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -398,23 +404,21 @@ export default function Home() {
                   </motion.div>
                 </Link>
               ) : (
-                <a href={"/login"}>
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button size="lg" className="text-lg px-8 py-6 shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-shadow">
-                      はじめる
-                    </Button>
-                  </motion.div>
-                </a>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button onClick={handleLogin} size="lg" className="text-lg px-8 py-6 shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-shadow">
+                    はじめる
+                  </Button>
+                </motion.div>
               )}
             </motion.div>
           </motion.div>
-        </div>
-      </section>
+        </div >
+      </section >
 
       {/* 使い方セクション */}
-      <section className="py-16 bg-card">
+      < section className="py-16 bg-card" >
         <div className="container">
-          <motion.h2 
+          <motion.h2
             className="text-2xl md:text-3xl font-bold text-center mb-12"
             {...fadeInUp}
             viewport={{ once: true }}
@@ -423,7 +427,7 @@ export default function Home() {
           >
             3分で想いを残す
           </motion.h2>
-          <motion.div 
+          <motion.div
             className="grid md:grid-cols-4 gap-8 max-w-4xl mx-auto"
             variants={staggerContainer}
             initial="initial"
@@ -436,13 +440,13 @@ export default function Home() {
               { step: "3", title: "AIが手紙に", desc: "温かい文章に変換", icon: "✨" },
               { step: "4", title: "暗号化して保存", desc: "安全に未来へ届ける", icon: "🔐" },
             ].map((item, index) => (
-              <motion.div 
-                key={item.step} 
+              <motion.div
+                key={item.step}
                 className="text-center"
                 variants={fadeInUp}
                 custom={index}
               >
-                <motion.div 
+                <motion.div
                   className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-2xl font-bold mx-auto mb-4 shadow-md"
                   whileHover={{ scale: 1.1, rotate: 5 }}
                   transition={{ type: "spring", stiffness: 300 }}
@@ -455,10 +459,10 @@ export default function Home() {
             ))}
           </motion.div>
         </div>
-      </section>
+      </section >
 
       {/* テンプレートセクション（アコーディオン形式） */}
-      <section className="py-16">
+      < section className="py-16" >
         <div className="container max-w-3xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -494,9 +498,9 @@ export default function Home() {
                   </div>
                   <Accordion type="single" collapsible className="space-y-0">
                     {recommendedTemplates.map(template => (
-                      <TemplateAccordionItem 
-                        key={template.id} 
-                        template={template} 
+                      <TemplateAccordionItem
+                        key={template.id}
+                        template={template}
                         isRecommended={true}
                       />
                     ))}
@@ -570,8 +574,8 @@ export default function Home() {
                   </div>
                   <Accordion type="single" collapsible className="space-y-0">
                     {categoryTemplates.map(template => (
-                      <TemplateAccordionItem 
-                        key={template.id} 
+                      <TemplateAccordionItem
+                        key={template.id}
                         template={template}
                       />
                     ))}
@@ -588,13 +592,13 @@ export default function Home() {
             </div>
           )}
         </div>
-      </section>
+      </section >
 
       {/* メッセージセクション */}
-      <section className="py-16 bg-gradient-to-br from-amber-50 to-orange-50 relative overflow-hidden">
+      < section className="py-16 bg-gradient-to-br from-amber-50 to-orange-50 relative overflow-hidden" >
         <motion.div
           className="absolute inset-0 opacity-20"
-          animate={{ 
+          animate={{
             background: [
               "radial-gradient(circle at 30% 70%, rgba(251, 191, 36, 0.4) 0%, transparent 50%)",
               "radial-gradient(circle at 70% 30%, rgba(251, 191, 36, 0.4) 0%, transparent 50%)",
@@ -635,22 +639,20 @@ export default function Home() {
                 </motion.div>
               </Link>
             ) : (
-              <a href={"/login"}>
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button size="lg" className="shadow-lg shadow-orange-200">
-                    はじめる
-                  </Button>
-                </motion.div>
-              </a>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button onClick={handleLogin} size="lg" className="shadow-lg shadow-orange-200">
+                  はじめる
+                </Button>
+              </motion.div>
             )}
           </motion.div>
-        </div>
-      </section>
+        </div >
+      </section >
 
       {/* セキュリティセクション */}
-      <section className="py-16 bg-card">
+      < section className="py-16 bg-card" >
         <div className="container max-w-4xl">
-          <motion.h2 
+          <motion.h2
             className="text-2xl md:text-3xl font-bold text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -658,7 +660,7 @@ export default function Home() {
           >
             安全に、確実に届ける
           </motion.h2>
-          <motion.div 
+          <motion.div
             className="grid md:grid-cols-3 gap-8"
             variants={staggerContainer}
             initial="initial"
@@ -666,30 +668,30 @@ export default function Home() {
             viewport={{ once: true }}
           >
             {[
-              { 
-                icon: <Shield className="h-8 w-8" />, 
-                title: "AES-256暗号化", 
-                desc: "軍事レベルの暗号化であなたの想いを守ります" 
+              {
+                icon: <Shield className="h-8 w-8" />,
+                title: "AES-256暗号化",
+                desc: "軍事レベルの暗号化であなたの想いを守ります"
               },
-              { 
-                icon: <Lock className="h-8 w-8" />, 
-                title: "クライアント側暗号化", 
-                desc: "サーバーでも読めない完全なプライバシー" 
+              {
+                icon: <Lock className="h-8 w-8" />,
+                title: "クライアント側暗号化",
+                desc: "サーバーでも読めない完全なプライバシー"
               },
-              { 
-                icon: <FileCheck className="h-8 w-8" />, 
-                title: "SHA-256証跡", 
-                desc: "改ざん検知で真正性を保証" 
+              {
+                icon: <FileCheck className="h-8 w-8" />,
+                title: "SHA-256証跡",
+                desc: "改ざん検知で真正性を保証"
               },
             ].map((item, index) => (
-              <motion.div 
+              <motion.div
                 key={item.title}
                 className="text-center p-6 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50"
                 variants={fadeInUp}
                 custom={index}
                 whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(251, 191, 36, 0.2)" }}
               >
-                <motion.div 
+                <motion.div
                   className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center mx-auto mb-4"
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.5 }}
@@ -702,10 +704,10 @@ export default function Home() {
             ))}
           </motion.div>
         </div>
-      </section>
+      </section >
 
       {/* フッター */}
-      <footer className="py-8 border-t bg-card/50">
+      < footer className="py-8 border-t bg-card/50" >
         <div className="container text-center text-sm text-muted-foreground">
           <motion.div
             initial={{ opacity: 0 }}
@@ -733,7 +735,7 @@ export default function Home() {
             </div>
           </motion.div>
         </div>
-      </footer>
-    </div>
+      </footer >
+    </div >
   );
 }

@@ -60,7 +60,7 @@ export default function Settings() {
     if (settings) {
       const original = settings.notificationEmail || "";
       setHasChanges(notificationEmail !== original);
-      
+
       const originalEmail = settings.accountEmail || "";
       setHasEmailChanges(accountEmail !== originalEmail && accountEmail.trim() !== "");
     }
@@ -263,6 +263,30 @@ export default function Settings() {
               <p className="mt-4 text-xs text-muted-foreground">
                 ※ 通知には宛先と開封日時のみが含まれます。本文はゼロ知識設計のため、運営者も読めません。
               </p>
+            </CardContent>
+          </Card>
+
+          {/* 家族グループ */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                家族グループ
+              </CardTitle>
+              <CardDescription>
+                家族グループを作成して、メンバーと手紙を共有できます。
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                グループのメンバーだけが「家族」スコープの手紙を読むことができます。
+              </p>
+              <Link href="/family">
+                <Button variant="outline" className="w-full">
+                  <Users className="mr-2 h-4 w-4" />
+                  家族グループを管理
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 

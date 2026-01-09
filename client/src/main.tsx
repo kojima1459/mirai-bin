@@ -57,6 +57,32 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+// Safe Analytics Injection
+const analyticsEndpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;
+const analyticsWebsiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
+
+if (analyticsEndpoint && analyticsWebsiteId) {
+  const s = document.createElement("script");
+  s.defer = true;
+  s.src = `${analyticsEndpoint.replace(/\/$/, "")}/umami`;
+  s.dataset.websiteId = analyticsWebsiteId;
+  document.head.appendChild(s);
+}
+
+// Service Worker Registration with BUILD_ID
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    const buildId = import.meta.env.VITE_BUILD_ID;
+    navigator.serviceWorker.register(`/sw.js${buildId ? '?v=' + buildId : ''}`)
+      .then(registration => {
+        console.log('SW registered: ', registration);
+      })
+      .catch(registrationError => {
+        console.log('SW registration failed: ', registrationError);
+      });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>

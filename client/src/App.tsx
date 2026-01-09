@@ -19,6 +19,8 @@ import LetterDetail from "./pages/LetterDetail";
 import AccountRecovery from "./pages/AccountRecovery";
 import Login from "./pages/Login";
 import Interview from "./pages/Interview";
+import Family from "./pages/Family";
+import FamilyInvite from "./pages/FamilyInvite";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 
 // Protected route wrapper
@@ -49,9 +51,7 @@ function Router() {
       <Route path={"/share/:token"} component={ShareLetter} />
 
       {/* Protected routes */}
-      <Route path={"/"}>
-        <ProtectedRoute component={Home} />
-      </Route>
+      <Route path={"/"} component={Home} />
       <Route path={"/create"}>
         <ProtectedRoute component={CreateLetter} />
       </Route>
@@ -78,6 +78,12 @@ function Router() {
       </Route>
       <Route path={"/account-recovery"}>
         <ProtectedRoute component={AccountRecovery} />
+      </Route>
+      <Route path={"/family"}>
+        <ProtectedRoute component={Family} />
+      </Route>
+      <Route path={"/family/invite/:token"}>
+        <ProtectedRoute component={FamilyInvite} />
       </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

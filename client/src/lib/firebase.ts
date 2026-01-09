@@ -25,9 +25,13 @@ if (typeof window !== "undefined") {
 }
 
 // Auth functions
-export async function signInWithGoogle(): Promise<User> {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
+export async function signInWithGoogle(): Promise<void> {
+    try {
+        await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+        console.error("Error signing in with Google", error);
+        throw error;
+    }
 }
 
 export async function signOutUser(): Promise<void> {
