@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
+
 import { motion } from "framer-motion";
 import { 
   Cake, GraduationCap, Heart, Mail, Loader2, PenLine, 
@@ -229,7 +229,7 @@ export default function Home() {
                   </Button>
                 </Link>
               ) : (
-                <a href={getLoginUrl()}>
+                <a href={"/login"}>
                   <Button className="w-full h-12 md:h-10 text-base md:text-sm">
                     ログインして手紙を書く
                   </Button>
@@ -298,7 +298,7 @@ export default function Home() {
                 </DropdownMenu>
               </>
             ) : (
-              <a href={getLoginUrl()}>
+              <a href={"/login"}>
                 <Button>ログイン</Button>
               </a>
             )}
@@ -398,7 +398,7 @@ export default function Home() {
                   </motion.div>
                 </Link>
               ) : (
-                <a href={getLoginUrl()}>
+                <a href={"/login"}>
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <Button size="lg" className="text-lg px-8 py-6 shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-shadow">
                       はじめる
@@ -635,7 +635,7 @@ export default function Home() {
                 </motion.div>
               </Link>
             ) : (
-              <a href={getLoginUrl()}>
+              <a href={"/login"}>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Button size="lg" className="shadow-lg shadow-orange-200">
                     はじめる

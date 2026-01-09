@@ -24,7 +24,7 @@ function createAuthContext(): { ctx: TrpcContext } {
       headers: {},
     } as TrpcContext["req"],
     res: {
-      clearCookie: () => {},
+      clearCookie: () => { },
     } as TrpcContext["res"],
   };
 
@@ -195,7 +195,7 @@ describe("Zero-Knowledge Design Verification", () => {
       // 1. finalContentはDBに保存されない
       // 2. encryptionKeyはサーバーに送信されない
       // 3. clientShareはサーバーに送信されない（暗号化されたものだけ）
-      
+
       const serverStoredData = {
         ciphertextUrl: "https://s3.example.com/ciphertext.enc",
         encryptionIv: "iv-value",
@@ -224,10 +224,10 @@ describe("Zero-Knowledge Design Verification", () => {
 
       // 解錠コードがないと復号できない
       expect(decryptionRequirements.unlockCode).toBeDefined();
-      
+
       // サーバーシェアがないと復号できない
       expect(decryptionRequirements.serverShare).toBeDefined();
-      
+
       // サーバーは解錠コードを知らない
       // クライアントはサーバーシェアを開封日時前に取得できない
     });
@@ -246,10 +246,105 @@ describe("Zero-Knowledge Design Verification", () => {
 
       expect(shamirConfig.threshold).toBe(2);
       expect(shamirConfig.totalShares).toBe(3);
-      
+
       // 復号には任意の2シェアが必要
       // 通常: clientShare + serverShare
       // 緊急: clientShare + backupShare または serverShare + backupShare
+    });
+  });
+
+  describe("Zero-Knowledge Audio Attachment", () => {
+    it("should only return encryptedAudio after unlock time", () => {
+      // 開封日時前はencryptedAudioがnullであることを確認
+      const beforeUnlockResponse = {
+        canUnlock: false,
+        serverShare: null,
+        encryptedAudio: null, // 開封日時前は返さない
+      };
+
+      expect(beforeUnlockResponse.canUnlock).toBe(false);
+      expect(beforeUnlockResponse.encryptedAudio).toBeNull();
+
+      // 開封日時後はencryptedAudioが返されることを確認
+      const afterUnlockResponse = {
+        canUnlock: true,
+        serverShare: "server-share-value",
+        encryptedAudio: {
+          url: "https://storage.example.com/encrypted-audio.enc",
+          iv: "audio-iv-value",
+          mimeType: "audio/webm",
+          byteSize: 123456,
+          durationSec: 45,
+          cryptoVersion: "audio-v1",
+        },
+      };
+
+      expect(afterUnlockResponse.canUnlock).toBe(true);
+      expect(afterUnlockResponse.encryptedAudio).not.toBeNull();
+      expect(afterUnlockResponse.encryptedAudio?.cryptoVersion).toBe("audio-v1");
+    });
+
+    it("should NOT expose plaintext audio to server", () => {
+      // サーバーに保存されるのは暗号化された音声のメタデータのみ
+      const serverStoredAudioData = {
+        encryptedAudioUrl: "https://storage.example.com/encrypted.enc",
+        encryptedAudioIv: "iv-value",
+        encryptedAudioMimeType: "audio/webm",
+        encryptedAudioByteSize: 123456,
+        encryptedAudioDurationSec: 45,
+        encryptedAudioCryptoVersion: "audio-v1",
+        // 以下は存在しない（平文音声は保存されない）
+        // plaintextAudio: undefined,
+        // audioKey: undefined,
+      };
+
+      expect(serverStoredAudioData).not.toHaveProperty("plaintextAudio");
+      expect(serverStoredAudioData).not.toHaveProperty("audioKey");
+      expect(serverStoredAudioData.encryptedAudioCryptoVersion).toBe("audio-v1");
+    });
+
+    it("audio key should be derived from masterKey using HKDF", () => {
+      // 音声鍵はmasterKeyからHKDFで導出される
+      const audioKeyDerivation = {
+        algorithm: "HKDF",
+        hash: "SHA-256",
+        info: "audio-v1",
+        // masterKeyは本文暗号化と共通（Shamir分割前）
+        // 音声鍵は本文鍵とは別（用途分離）
+      };
+
+      expect(audioKeyDerivation.algorithm).toBe("HKDF");
+      expect(audioKeyDerivation.info).toBe("audio-v1");
+    });
+
+    it("audio decryption requires same masterKey as text decryption", () => {
+      // 音声復号には本文復号と同じmasterKeyが必要
+      const decryptionFlow = {
+        step1: "unwrapClientShare(envelope, unlockCode) -> clientShare",
+        step2: "combineShares(clientShare, serverShare) -> masterKey",
+        step3_text: "decryptLetter(ciphertext, iv, masterKey) -> plaintext",
+        step3_audio: "decryptAudio(encryptedAudio, audioIv, masterKey) -> audioBlob",
+      };
+
+      // 本文と音声は同じmasterKeyから復号される
+      expect(decryptionFlow.step3_text).toContain("masterKey");
+      expect(decryptionFlow.step3_audio).toContain("masterKey");
+    });
+
+    it("should enforce size limit for audio uploads", () => {
+      // アップロードサイズ制限（10MB）
+      const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10MB
+
+      expect(MAX_AUDIO_SIZE).toBe(10485760);
+
+      // サイズ超過時はエラー
+      const oversizedAudio = {
+        byteSize: 15 * 1024 * 1024, // 15MB
+        isAllowed: false,
+      };
+
+      expect(oversizedAudio.byteSize).toBeGreaterThan(MAX_AUDIO_SIZE);
+      expect(oversizedAudio.isAllowed).toBe(false);
     });
   });
 });

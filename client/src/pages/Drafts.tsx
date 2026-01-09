@@ -13,7 +13,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
+
 import { ArrowLeft, FileEdit, Loader2, Mail, Trash2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
@@ -37,7 +37,7 @@ export default function Drafts() {
 
   // 認証チェック
   if (!authLoading && !isAuthenticated) {
-    window.location.href = getLoginUrl();
+    window.location.href = "/login";
     return null;
   }
 

@@ -32,63 +32,77 @@ export type InsertUser = typeof users.$inferInsert;
 export const letters = mysqlTable("letters", {
   id: int("id").autoincrement().primaryKey(),
   authorId: int("authorId").notNull(),
-  
+
+  // 公開スコープ: private(自分のみ), family(家族グループ), link(URL共有)
+  visibilityScope: mysqlEnum("visibilityScope", ["private", "family", "link"]).default("private").notNull(),
+  familyId: int("familyId"), // FAMILYスコープ時のみ設定
+
   // 受取人情報
   recipientName: varchar("recipientName", { length: 100 }),
   recipientRelation: varchar("recipientRelation", { length: 50 }),
-  
+
   // 音声データ（URL参照のみ、本文は保存しない）
   audioUrl: varchar("audioUrl", { length: 500 }),
   audioDuration: int("audioDuration"),
-  
+
+  // 暗号化済み音声（ゼロ知識設計）
+  // - クライアント側で暗号化された音声の保存先URL
+  // - 復号鍵はmasterKeyからHKDFで導出（本文とは別キー）
+  encryptedAudioUrl: varchar("encryptedAudioUrl", { length: 500 }),
+  encryptedAudioIv: varchar("encryptedAudioIv", { length: 255 }),
+  encryptedAudioMimeType: varchar("encryptedAudioMimeType", { length: 100 }),
+  encryptedAudioByteSize: int("encryptedAudioByteSize"),
+  encryptedAudioDurationSec: int("encryptedAudioDurationSec"),
+  encryptedAudioCryptoVersion: varchar("encryptedAudioCryptoVersion", { length: 20 }),
+
   // テンプレート情報（本文は保存しない）
   templateUsed: varchar("templateUsed", { length: 50 }),
-  
+
   // 暗号化関連（ゼロ知識: 暗号文のみ保存）
   isEncrypted: boolean("isEncrypted").default(true).notNull(),
   encryptionIv: varchar("encryptionIv", { length: 255 }).notNull(),
   ciphertextUrl: varchar("ciphertextUrl", { length: 500 }).notNull(),
-  
+
   // 証跡関連
   proofHash: varchar("proofHash", { length: 64 }).notNull(),
   proofProvider: varchar("proofProvider", { length: 50 }).default("local"),
   txHash: varchar("txHash", { length: 66 }),
   proofCreatedAt: timestamp("proofCreatedAt"),
-  
+
   // OpenTimestamps関連
   otsFileUrl: varchar("otsFileUrl", { length: 500 }),
   otsStatus: varchar("otsStatus", { length: 20 }).default("pending"), // pending, submitted, confirmed
   otsSubmittedAt: timestamp("otsSubmittedAt"),
   otsConfirmedAt: timestamp("otsConfirmedAt"),
-  
+
   // 開封関連
   unlockAt: timestamp("unlockAt"),
   unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
   isUnlocked: boolean("isUnlocked").default(false).notNull(),
   unlockedAt: timestamp("unlockedAt"),
-  
+
   // 共有リンク関連
   shareToken: varchar("shareToken", { length: 64 }).unique(),
   viewCount: int("viewCount").default(0).notNull(),
   lastViewedAt: timestamp("lastViewedAt"),
-  
+
   // Shamirシェア（ゼロ知識設計）
   // - serverShare: 開封日時後にのみ提供
   // - clientShareは解錠コードで暗号化してwrappedClientShareとして保存
   // - backupShareはサーバーに保存しない（ユーザーが保管）
   serverShare: text("serverShare"),
   useShamir: boolean("useShamir").default(true).notNull(),
-  
+
   // 解錠コードで暗号化されたclientShare（封筒）
   wrappedClientShare: text("wrappedClientShare"),
   wrappedClientShareIv: varchar("wrappedClientShareIv", { length: 255 }),
   wrappedClientShareSalt: varchar("wrappedClientShareSalt", { length: 255 }),
   wrappedClientShareKdf: varchar("wrappedClientShareKdf", { length: 50 }),
   wrappedClientShareKdfIters: int("wrappedClientShareKdfIters"),
-  
+
   // 解錠コード再発行（1回のみ）
   unlockCodeRegeneratedAt: timestamp("unlockCodeRegeneratedAt"),
-  
+
   // メタデータ
   status: varchar("status", { length: 20 }).default("draft").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -136,29 +150,29 @@ export type InsertTemplate = typeof templates.$inferInsert;
 export const drafts = mysqlTable("drafts", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  
+
   // テンプレート情報
   templateName: varchar("templateName", { length: 50 }),
-  
+
   // 受取人情報
   recipientName: varchar("recipientName", { length: 100 }),
   recipientRelation: varchar("recipientRelation", { length: 50 }),
-  
+
   // 音声データ
   audioUrl: varchar("audioUrl", { length: 500 }),
   audioBase64: text("audioBase64"),
-  
+
   // 文字起こし・下書き（封緘前なので平文保存）
   transcription: text("transcription"),
   aiDraft: text("aiDraft"),
   finalContent: text("finalContent"),
-  
+
   // 開封日時
   unlockAt: timestamp("unlockAt"),
-  
+
   // 進捗状態
   currentStep: varchar("currentStep", { length: 20 }).default("template").notNull(),
-  
+
   // メタデータ
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -178,19 +192,19 @@ export const letterReminders = mysqlTable("letter_reminders", {
   id: int("id").autoincrement().primaryKey(),
   letterId: int("letterId").notNull(),
   ownerUserId: int("ownerUserId").notNull(),
-  
+
   // リマインダー種別
   type: varchar("type", { length: 50 }).default("before_unlock").notNull(), // before_unlock
   daysBefore: int("daysBefore").notNull(), // 90, 30, 7, 1
-  
+
   // スケジュール
   scheduledAt: timestamp("scheduledAt").notNull(), // unlockAt - daysBefore
   sentAt: timestamp("sentAt"), // 送信済みならセット
-  
+
   // ステータス
   status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, sent, failed
   lastError: text("lastError"),
-  
+
   // メタデータ
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -212,20 +226,20 @@ export const letterShareTokens = mysqlTable("letter_share_tokens", {
   id: int("id").autoincrement().primaryKey(),
   token: varchar("token", { length: 64 }).notNull().unique(),
   letterId: int("letterId").notNull(),
-  
+
   // ステータス: active（有効）, revoked（無効化）, rotated（置換済み）
   status: varchar("status", { length: 20 }).default("active").notNull(),
-  
+
   // 置換時の新トークン（rotated時のみ）
   replacedByToken: varchar("replacedByToken", { length: 64 }),
-  
+
   // 失効理由（任意）
   revokeReason: varchar("revokeReason", { length: 255 }),
-  
+
   // アクセス統計
   viewCount: int("viewCount").default(0).notNull(),
   lastAccessedAt: timestamp("lastAccessedAt"),
-  
+
   // タイムスタンプ
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   revokedAt: timestamp("revokedAt"),
@@ -233,3 +247,77 @@ export const letterShareTokens = mysqlTable("letter_share_tokens", {
 
 export type LetterShareToken = typeof letterShareTokens.$inferSelect;
 export type InsertLetterShareToken = typeof letterShareTokens.$inferInsert;
+
+/**
+ * 家族グループテーブル
+ */
+export const families = mysqlTable("families", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerUserId: int("ownerUserId").notNull(),
+  name: varchar("name", { length: 100 }).default("マイファミリー"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Family = typeof families.$inferSelect;
+export type InsertFamily = typeof families.$inferInsert;
+
+/**
+ * 家族メンバーテーブル
+ * familyId + userId で一意
+ */
+export const familyMembers = mysqlTable("family_members", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["owner", "member"]).default("member").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FamilyMember = typeof familyMembers.$inferSelect;
+export type InsertFamilyMember = typeof familyMembers.$inferInsert;
+
+/**
+ * 家族招待テーブル
+ * email招待 → 受諾で membership作成
+ */
+export const familyInvites = mysqlTable("family_invites", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: mysqlEnum("status", ["pending", "accepted", "revoked"]).default("pending").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FamilyInvite = typeof familyInvites.$inferSelect;
+export type InsertFamilyInvite = typeof familyInvites.$inferInsert;
+
+/**
+ * インタビューセッションテーブル
+ */
+export const interviewSessions = mysqlTable("interview_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  recipientName: varchar("recipientName", { length: 100 }), // 誰宛か
+  topic: varchar("topic", { length: 100 }), // 話題（自分史、感謝、謝罪etc）
+  status: mysqlEnum("status", ["active", "completed"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InterviewSession = typeof interviewSessions.$inferSelect;
+export type InsertInterviewSession = typeof interviewSessions.$inferInsert;
+
+/**
+ * チャットメッセージ履歴テーブル
+ */
+export const interviewMessages = mysqlTable("interview_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  sender: mysqlEnum("sender", ["ai", "user"]).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InterviewMessage = typeof interviewMessages.$inferSelect;
+export type InsertInterviewMessage = typeof interviewMessages.$inferInsert;

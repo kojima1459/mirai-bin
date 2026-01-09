@@ -11,21 +11,21 @@ import { trpc } from "@/lib/trpc";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useEncryption } from "@/hooks/useEncryption";
 import { formatDuration } from "@/lib/audio";
-import { getLoginUrl } from "@/const";
+
 import { useLocation, useSearch } from "wouter";
 import { useDraftAutoSave } from "@/hooks/useDraftAutoSave";
 import { splitKey } from "@/lib/shamir";
-import { wrapClientShare, generateUnlockCode } from "@/lib/crypto";
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Cake, 
-  GraduationCap, 
-  Heart, 
-  Loader2, 
-  Mail, 
-  Mic, 
-  Square, 
+import { wrapClientShare, generateUnlockCode, encryptAudio, arrayBufferToBase64 } from "@/lib/crypto";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Cake,
+  GraduationCap,
+  Heart,
+  Loader2,
+  Mail,
+  Mic,
+  Square,
   Check,
   Lock,
   Calendar,
@@ -46,7 +46,8 @@ import {
   Download,
   FileText,
   RotateCcw,
-  Bell
+  Bell,
+  Sparkles
 } from "lucide-react";
 import { AudioWaveform, RecordingTimer } from "@/components/AudioWaveform";
 import { TemplateAccordion } from "@/components/TemplateAccordion";
@@ -98,21 +99,21 @@ export default function CreateLetter() {
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
-  
+
   // ゼロ知識設計: 解錠コードとバックアップシェア
   const [unlockCode, setUnlockCode] = useState<string | null>(null);
   const [backupShare, setBackupShare] = useState<string | null>(null);
   const [showUnlockCode, setShowUnlockCode] = useState(false);
   const [showBackupShare, setShowBackupShare] = useState(false);
   const [unlockCodeViewCount, setUnlockCodeViewCount] = useState(0); // 再表示制限用
-  
+
   // リマインダー設定
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [reminderDays, setReminderDays] = useState<number[]>([30, 7, 1]); // デフォルト: 30日前、7日前、1日前
 
   // Hooks
   const { data: templates, isLoading: templatesLoading } = trpc.template.list.useQuery();
-  const { isRecording, elapsed, remaining, start, stop, base64, error: recordingError, reset: resetRecording } = useVoiceRecorder({ maxDuration: MAX_DURATION });
+  const { isRecording, elapsed, remaining, start, stop, base64, result: recordingResult, error: recordingError, reset: resetRecording } = useVoiceRecorder({ maxDuration: MAX_DURATION });
   const { isEncrypting, progress: encryptionProgress, encrypt, reset: resetEncryption } = useEncryption();
 
   // Mutations
@@ -120,6 +121,7 @@ export default function CreateLetter() {
   const transcribeMutation = trpc.ai.transcribe.useMutation();
   const generateDraftMutation = trpc.ai.generateDraft.useMutation();
   const uploadCiphertextMutation = trpc.storage.uploadCiphertext.useMutation();
+  const uploadEncryptedAudioMutation = trpc.storage.uploadEncryptedAudio.useMutation();
   const createLetterMutation = trpc.letter.create.useMutation();
   const setUnlockEnvelopeMutation = trpc.letter.setUnlockEnvelope.useMutation();
   const generateShareLinkMutation = trpc.letter.generateShareLink.useMutation();
@@ -193,7 +195,7 @@ export default function CreateLetter() {
   // 認証チェック
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      window.location.href = getLoginUrl();
+      window.location.href = "/login";
     }
   }, [authLoading, isAuthenticated]);
 
@@ -264,7 +266,7 @@ export default function CreateLetter() {
   // 共有リンクを生成（ゼロ知識版）
   const handleGenerateShareLink = async () => {
     if (!letterId || !unlockCode) return;
-    
+
     try {
       const result = await generateShareLinkMutation.mutateAsync({ id: letterId });
       setShareToken(result.shareToken);
@@ -297,7 +299,7 @@ export default function CreateLetter() {
       toast.success("解錠コードをコピーしました", {
         description: "今すぐ別経路で送ってください",
       });
-      
+
       // 30秒後にクリップボードを自動クリア
       setTimeout(async () => {
         try {
@@ -325,11 +327,11 @@ export default function CreateLetter() {
   // PDF分割出力（3ページ：リンク+QR／解錠コード／バックアップ）
   const handleExportPDF = async () => {
     if (!shareUrl || !unlockCode) return;
-    
+
     try {
       // QRコード生成（Google Charts API使用）
       const qrCodeUrl = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(shareUrl)}&choe=UTF-8`;
-      
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -501,7 +503,7 @@ export default function CreateLetter() {
           </body>
         </html>
       `;
-      
+
       const printWindow = window.open('', '', 'width=800,height=600');
       if (printWindow) {
         printWindow.document.write(html);
@@ -541,19 +543,56 @@ export default function CreateLetter() {
 
       // 3. Shamir分割（クライアント側で実行）
       const shares = await splitKey(encryptResult.encryption.key);
-      
+
       // 4. 解錠コードを生成
       const code = generateUnlockCode(12);
       setUnlockCode(code);
-      
+
       // 5. clientShareを解錠コードで暗号化（封筒作成）
       const envelope = await wrapClientShare(shares.clientShare, code);
-      
+
       // 6. バックアップシェアを保存（ユーザーに提示）
       setBackupShare(shares.backupShare);
 
       // 開封日時を取得
       const unlockAt = getUnlockAt();
+
+      // 6.5. 音声がある場合は暗号化してアップロード（ゼロ知識設計）
+      let encryptedAudioData: {
+        url: string;
+        iv: string;
+        mimeType: string;
+        byteSize: number;
+        durationSec: number;
+        version: string;
+      } | null = null;
+
+      if (recordingResult?.blob) {
+        try {
+          // 音声を暗号化（masterKeyから導出したキーを使用）
+          const audioEncrypted = await encryptAudio(recordingResult.blob, encryptResult.encryption.key);
+
+          // 暗号化された音声をBase64に変換してアップロード
+          const encryptedAudioBase64 = arrayBufferToBase64(audioEncrypted.ciphertext);
+          const audioUploadResult = await uploadEncryptedAudioMutation.mutateAsync({
+            encryptedAudioBase64,
+            mimeType: audioEncrypted.mimeType,
+            byteSize: audioEncrypted.ciphertext.byteLength,
+          });
+
+          encryptedAudioData = {
+            url: audioUploadResult.url,
+            iv: audioEncrypted.iv,
+            mimeType: audioEncrypted.mimeType,
+            byteSize: audioEncrypted.ciphertext.byteLength,
+            durationSec: elapsed,
+            version: audioEncrypted.version,
+          };
+        } catch (audioErr) {
+          console.warn("音声の暗号化アップロードに失敗しました（手紙本文は保存します）", audioErr);
+          // 音声の暗号化失敗は警告のみで続行（本文は保存する）
+        }
+      }
 
       // 7. DB保存（サーバーにはserverShareのみ送信、本文は送らない）
       const letterResult = await createLetterMutation.mutateAsync({
@@ -564,6 +603,13 @@ export default function CreateLetter() {
         templateUsed: selectedTemplate || undefined,
         encryptionIv: encryptResult.encryption.iv,
         ciphertextUrl: uploadResult.url,
+        // 暗号化済み音声メタデータ
+        encryptedAudioUrl: encryptedAudioData?.url,
+        encryptedAudioIv: encryptedAudioData?.iv,
+        encryptedAudioMimeType: encryptedAudioData?.mimeType,
+        encryptedAudioByteSize: encryptedAudioData?.byteSize,
+        encryptedAudioDurationSec: encryptedAudioData?.durationSec,
+        encryptedAudioCryptoVersion: encryptedAudioData?.version,
         proofHash: encryptResult.proof.hash,
         unlockAt: unlockAt,
         useShamir: true,
@@ -571,7 +617,7 @@ export default function CreateLetter() {
       });
 
       setLetterId(letterResult.id);
-      
+
       // 8. 封筒（暗号化されたclientShare）を保存
       await setUnlockEnvelopeMutation.mutateAsync({
         id: letterResult.id,
@@ -581,7 +627,7 @@ export default function CreateLetter() {
         wrappedClientShareKdf: envelope.wrappedClientShareKdf,
         wrappedClientShareKdfIters: envelope.wrappedClientShareKdfIters,
       });
-      
+
       // 下書きを削除（正式保存したので）
       if (draftId) {
         try {
@@ -592,7 +638,7 @@ export default function CreateLetter() {
           console.warn("下書きの削除に失敗しました", e);
         }
       }
-      
+
       // 9. リマインダーを設定（開封日が設定されている場合）
       if (reminderEnabled && reminderDays.length > 0 && unlockDate) {
         try {
@@ -607,7 +653,7 @@ export default function CreateLetter() {
           toast.warning("リマインダーの設定に失敗しました");
         }
       }
-      
+
       setStep("complete");
       toast.success("手紙を保存しました");
     } catch (err) {
@@ -664,13 +710,12 @@ export default function CreateLetter() {
           {["template", "recording", "editing", "complete"].map((s, i) => (
             <div key={s} className="flex items-center">
               <div
-                className={`w-9 h-9 md:w-8 md:h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                  step === s || (step === "transcribing" && s === "recording") || (step === "generating" && s === "recording") || (step === "encrypting" && s === "editing")
-                    ? "bg-primary text-primary-foreground"
-                    : ["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s)
+                className={`w-9 h-9 md:w-8 md:h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${step === s || (step === "transcribing" && s === "recording") || (step === "generating" && s === "recording") || (step === "encrypting" && s === "editing")
+                  ? "bg-primary text-primary-foreground"
+                  : ["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s)
                     ? "bg-primary/20 text-primary"
                     : "bg-muted text-muted-foreground"
-                }`}
+                  }`}
               >
                 {["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s) ? (
                   <Check className="h-4 w-4" />
@@ -708,6 +753,26 @@ export default function CreateLetter() {
                   <p>テンプレートがありません</p>
                 </div>
               )}
+
+              {/* AIインタビューへの誘導 */}
+              <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
+                <div className="flex items-start gap-3">
+                  <div className="bg-white p-2 rounded-full shadow-sm text-indigo-600 mt-1">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-indigo-900">書く内容に迷っていませんか？</h3>
+                    <p className="text-sm text-indigo-700 mt-1">AIがあなたにインタビューして、<br className="md:hidden" />手紙の下書きを一緒に作ります。</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full md:w-auto border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
+                  onClick={() => navigate("/interview")}
+                >
+                  AIと話しながら書く
+                </Button>
+              </div>
 
               <div className="space-y-4 pt-4 border-t">
                 <div className="space-y-2">
@@ -984,7 +1049,7 @@ export default function CreateLetter() {
                       </Label>
                     </div>
                   </div>
-                  
+
                   {reminderEnabled && (
                     <>
                       <p className="text-base md:text-sm text-muted-foreground">
@@ -994,11 +1059,10 @@ export default function CreateLetter() {
                         {[90, 30, 7, 1].map((days) => (
                           <label
                             key={days}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                              reminderDays.includes(days)
-                                ? "bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600"
-                                : "bg-background border-input hover:bg-muted"
-                            }`}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${reminderDays.includes(days)
+                              ? "bg-amber-100 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600"
+                              : "bg-background border-input hover:bg-muted"
+                              }`}
                           >
                             <Checkbox
                               checked={reminderDays.includes(days)}
@@ -1147,9 +1211,9 @@ export default function CreateLetter() {
                       readOnly
                       className="font-mono text-center text-lg bg-background"
                     />
-                    <Button 
-                      size="icon" 
-                      variant="outline" 
+                    <Button
+                      size="icon"
+                      variant="outline"
                       onClick={handleCopyUnlockCode}
                       title="コードをコピー（クリップボードは30秒後自動削除）"
                     >
@@ -1189,7 +1253,7 @@ export default function CreateLetter() {
                   <p className="text-xs text-muted-foreground">
                     緑急時の復旧用です。紙に印刷して安全な場所に保管してください。
                   </p>
-                  
+
                   {/* PDF分割出力ボタン */}
                   {shareUrl && (
                     <Button
@@ -1209,7 +1273,7 @@ export default function CreateLetter() {
                     <Share2 className="h-5 w-5" />
                     <span className="font-medium">手紙を共有する</span>
                   </div>
-                  
+
                   {!shareUrl ? (
                     <>
                       <p className="text-sm text-muted-foreground">
@@ -1243,7 +1307,7 @@ export default function CreateLetter() {
                           <ExternalLink className="h-4 w-4" />
                         </Button>
                       </div>
-                      
+
                       {/* 警告 */}
                       <Alert className="text-left border-red-500 bg-red-50 dark:bg-red-950/20">
                         <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -1256,7 +1320,7 @@ export default function CreateLetter() {
                           </ul>
                         </AlertDescription>
                       </Alert>
-                      
+
                       {/* LINE/メール共有ボタン */}
                       <div className="flex gap-2 pt-2">
                         <Button
@@ -1284,7 +1348,7 @@ export default function CreateLetter() {
                           メールで送る
                         </Button>
                       </div>
-                      
+
                       <p className="text-xs text-muted-foreground">
                         リンクを送った後、解錠コードを別のメッセージで送ってください
                         {unlockDate && "。開封日時までは内容を見ることができません"}

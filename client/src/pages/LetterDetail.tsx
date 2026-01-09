@@ -3,7 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
+
 import { useLocation, useParams } from "wouter";
 import { 
   ArrowLeft, 
@@ -158,7 +158,7 @@ export default function LetterDetail() {
   // 認証チェック
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      window.location.href = getLoginUrl();
+      window.location.href = "/login";
     }
   }, [authLoading, isAuthenticated]);
 

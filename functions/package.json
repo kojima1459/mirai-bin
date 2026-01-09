@@ -1,0 +1,37 @@
+{
+  "name": "functions",
+  "scripts": {
+    "build": "cd .. && pnpm run build:functions",
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.693.0",
+    "@aws-sdk/s3-request-presigner": "^3.693.0",
+    "@trpc/server": "^11.6.0",
+    "cookie": "^1.0.2",
+    "dotenv": "^17.2.2",
+    "drizzle-orm": "^0.44.5",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^6.5.0",
+    "jose": "6.1.0",
+    "mysql2": "^3.15.0",
+    "nanoid": "^5.1.5",
+    "opentimestamps": "^0.4.9",
+    "shamir-secret-sharing": "^0.0.4",
+    "superjson": "^1.13.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/express": "4.17.21",
+    "@types/node": "^24.7.0",
+    "typescript": "^5.9.3"
+  },
+  "private": true
+}

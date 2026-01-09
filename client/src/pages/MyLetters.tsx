@@ -1,22 +1,26 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
+
 import { useLocation } from "wouter";
-import { 
-  ArrowLeft, 
-  Cake, 
-  GraduationCap, 
-  Heart, 
-  Loader2, 
-  Mail, 
+import {
+  ArrowLeft,
+  Cake,
+  GraduationCap,
+  Heart,
+  Loader2,
+  Mail,
   PenLine,
   Lock,
   Clock,
   Trash2,
-  ChevronRight
+  ChevronRight,
+  User,
+  Users,
+  Link2
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -45,16 +49,26 @@ const templateNameMap: Record<string, string> = {
   "first-love": "最初に恋をした日へ",
 };
 
+type LetterScope = "private" | "family" | "link";
+
 export default function MyLetters() {
-  const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { loading: authLoading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
+  const [activeTab, setActiveTab] = useState<LetterScope>("private");
 
-  const { data: letters, isLoading: lettersLoading } = trpc.letter.list.useQuery();
+  // スコープ別に完全に分離されたクエリ（PRIVATE混入防止）
+  const privateLetters = trpc.letter.list.useQuery({ scope: "private" });
+  const familyLetters = trpc.letter.list.useQuery({ scope: "family" });
+  const linkLetters = trpc.letter.list.useQuery({ scope: "link" });
+
   const deleteMutation = trpc.letter.delete.useMutation({
     onSuccess: () => {
       toast.success("手紙を削除しました");
-      utils.letter.list.invalidate();
+      // 全スコープのキャッシュを無効化
+      utils.letter.list.invalidate({ scope: "private" });
+      utils.letter.list.invalidate({ scope: "family" });
+      utils.letter.list.invalidate({ scope: "link" });
     },
     onError: () => {
       toast.error("削除に失敗しました");
@@ -64,17 +78,134 @@ export default function MyLetters() {
   // 認証チェック
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      window.location.href = getLoginUrl();
+      window.location.href = "/login";
     }
   }, [authLoading, isAuthenticated]);
 
-  if (authLoading || lettersLoading) {
+  const isLoading = authLoading || privateLetters.isLoading || familyLetters.isLoading || linkLetters.isLoading;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  // 現在のタブに応じた手紙リストを取得（配列を混ぜない）
+  const getCurrentLetters = () => {
+    switch (activeTab) {
+      case "private":
+        return privateLetters.data ?? [];
+      case "family":
+        return familyLetters.data ?? [];
+      case "link":
+        return linkLetters.data ?? [];
+    }
+  };
+
+  const letters = getCurrentLetters();
+
+  const renderLetterCard = (letter: typeof letters[number]) => (
+    <Card
+      key={letter.id}
+      className="hover:shadow-md transition-shadow cursor-pointer"
+      onClick={() => navigate(`/letter/${letter.id}`)}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              {letter.templateUsed ? (
+                iconMap[letter.templateUsed] || <Mail className="h-5 w-5" />
+              ) : (
+                <Mail className="h-5 w-5" />
+              )}
+            </div>
+            <div>
+              <CardTitle className="text-base">
+                {letter.recipientName ? `${letter.recipientName}へ` : "手紙"}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {letter.templateUsed && templateNameMap[letter.templateUsed]}
+              </CardDescription>
+            </div>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>手紙を削除しますか？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  この操作は取り消せません。暗号化されたデータも完全に削除されます。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteMutation.mutate({ id: letter.id })}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  削除
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Clock className="h-4 w-4" />
+            <span>
+              {format(new Date(letter.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Lock className="h-4 w-4 text-green-600" />
+            <span className="text-green-600">暗号化済み</span>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            暗号化された手紙（運営者も読めません）
+          </p>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderEmptyState = (message: string) => (
+    <Card>
+      <CardContent className="py-16">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
+            <Mail className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold mb-2">{message}</h2>
+            <p className="text-muted-foreground">
+              大切な人への想いを、未来に届けましょう
+            </p>
+          </div>
+          <Button onClick={() => navigate("/create")}>
+            <PenLine className="mr-2 h-4 w-4" />
+            手紙を書く
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -98,109 +229,56 @@ export default function MyLetters() {
       </header>
 
       <main className="container py-8 max-w-3xl">
-        {letters && letters.length > 0 ? (
-          <div className="space-y-4">
-            {letters.map((letter) => (
-              <Card 
-                key={letter.id} 
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate(`/letter/${letter.id}`)}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                        {letter.templateUsed ? (
-                          iconMap[letter.templateUsed] || <Mail className="h-5 w-5" />
-                        ) : (
-                          <Mail className="h-5 w-5" />
-                        )}
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">
-                          {letter.recipientName ? `${letter.recipientName}へ` : "手紙"}
-                        </CardTitle>
-                        <CardDescription className="text-xs">
-                          {letter.templateUsed && templateNameMap[letter.templateUsed]}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>手紙を削除しますか？</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            この操作は取り消せません。暗号化されたデータも完全に削除されます。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteMutation.mutate({ id: letter.id })}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            削除
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      <span>
-                        {format(new Date(letter.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Lock className="h-4 w-4 text-green-600" />
-                      <span className="text-green-600">暗号化済み</span>
-                    </div>
-                  </div>
-                  {/* ゼロ知識設計: サーバーに本文を保存しないため、プレビューは表示しない */}
-                  <div className="mt-3 flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      暗号化された手紙（運営者も読めません）
-                    </p>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="py-16">
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-                  <Mail className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold mb-2">まだ手紙がありません</h2>
-                  <p className="text-muted-foreground">
-                    大切な人への想いを、未来に届けましょう
-                  </p>
-                </div>
-                <Button onClick={() => navigate("/create")}>
-                  <PenLine className="mr-2 h-4 w-4" />
-                  最初の手紙を書く
-                </Button>
+        {/* 3タブUI（スコープ別に完全分離） */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LetterScope)} className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="private" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">自分だけ</span>
+              <span className="sm:hidden">自分</span>
+            </TabsTrigger>
+            <TabsTrigger value="family" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">家族</span>
+              <span className="sm:hidden">家族</span>
+            </TabsTrigger>
+            <TabsTrigger value="link" className="flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              <span className="hidden sm:inline">リンク共有</span>
+              <span className="sm:hidden">リンク</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="private">
+            {letters.length > 0 ? (
+              <div className="space-y-4">
+                {letters.map(renderLetterCard)}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              renderEmptyState("自分だけの手紙はまだありません")
+            )}
+          </TabsContent>
+
+          <TabsContent value="family">
+            {letters.length > 0 ? (
+              <div className="space-y-4">
+                {letters.map(renderLetterCard)}
+              </div>
+            ) : (
+              renderEmptyState("家族への手紙はまだありません")
+            )}
+          </TabsContent>
+
+          <TabsContent value="link">
+            {letters.length > 0 ? (
+              <div className="space-y-4">
+                {letters.map(renderLetterCard)}
+              </div>
+            ) : (
+              renderEmptyState("リンク共有の手紙はまだありません")
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

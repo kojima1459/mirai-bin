@@ -1,7 +1,11 @@
 import { eq, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, letters, templates, drafts, letterReminders, letterShareTokens, InsertLetter, InsertTemplate, InsertDraft, InsertLetterReminder, Letter, Template, Draft, LetterReminder, LetterShareToken, InsertLetterShareToken } from "../drizzle/schema";
+import { InsertUser, users, letters, templates, drafts, letterReminders, letterShareTokens, families, familyMembers, familyInvites, interviewSessions, interviewMessages, InsertLetter, InsertTemplate, InsertDraft, InsertLetterReminder, Letter, Template, Draft, LetterReminder, LetterShareToken, InsertLetterShareToken, Family, InsertFamily, FamilyMember, InsertFamilyMember, FamilyInvite, InsertFamilyInvite, InterviewSession, InsertInterviewSession, InterviewMessage, InsertInterviewMessage } from "../drizzle/schema";
 import { ENV } from './_core/env';
+
+// Share Token Logic Import
+import * as ShareTokenLogic from "./db_share_token";
+import * as ReminderLogic from "./db_reminder";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -115,7 +119,7 @@ export async function getUserNotificationEmail(userId: number): Promise<string |
 
   const result = await db.select({ email: users.email, notificationEmail: users.notificationEmail }).from(users).where(eq(users.id, userId)).limit(1);
   if (result.length === 0) return null;
-  
+
   // notificationEmailが設定されていればそれを使用、未設定ならアカウントメールを使用
   return result[0].notificationEmail || result[0].email || null;
 }
@@ -200,7 +204,7 @@ export async function incrementViewCount(id: number): Promise<void> {
 
   const letter = await getLetterById(id);
   if (letter) {
-    await db.update(letters).set({ 
+    await db.update(letters).set({
       viewCount: letter.viewCount + 1,
       lastViewedAt: new Date()
     }).where(eq(letters.id, id));
@@ -222,11 +226,11 @@ export async function unlockLetter(id: number): Promise<boolean> {
   }
 
   // 原子的更新: isUnlocked = false の場合のみ更新
-  const result = await db.update(letters).set({ 
+  const result = await db.update(letters).set({
     isUnlocked: true,
     unlockedAt: new Date()
   }).where(and(eq(letters.id, id), eq(letters.isUnlocked, false)));
-  
+
   // affectedRows > 0 なら初回開封
   return (result as any)[0]?.affectedRows > 0;
 }
@@ -628,7 +632,7 @@ export async function seedTemplates(): Promise<void> {
 
   // 既存のテンプレートがない場合は全て追加、ある場合は存在しないもののみ追加
   const templatesToAdd = defaultTemplates.filter(t => !existingNames.has(t.name));
-  
+
   if (templatesToAdd.length === 0) {
     console.log("[Database] All templates already exist, skipping seed");
     return;
@@ -717,12 +721,8 @@ export async function getDraftByUserAndId(userId: number, draftId: number): Prom
  */
 export async function createReminder(reminder: InsertLetterReminder): Promise<number> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  const result = await db.insert(letterReminders).values(reminder);
-  return result[0].insertId;
+  if (!db) throw new Error("Database not available");
+  return ReminderLogic.createReminder(db, reminder);
 }
 
 /**
@@ -739,31 +739,8 @@ export async function createRemindersForLetter(
   daysBeforeList: number[]
 ): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  // 既存のリマインダーを削除
-  await db.delete(letterReminders).where(eq(letterReminders.letterId, letterId));
-
-  // 新しいリマインダーを作成
-  for (const daysBefore of daysBeforeList) {
-    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1000);
-    
-    // 過去の日付はスキップ
-    if (scheduledAt <= new Date()) {
-      continue;
-    }
-
-    await db.insert(letterReminders).values({
-      letterId,
-      ownerUserId,
-      type: "before_unlock",
-      daysBefore,
-      scheduledAt,
-      status: "pending",
-    });
-  }
+  if (!db) throw new Error("Database not available");
+  return ReminderLogic.createRemindersForLetter(db, letterId, ownerUserId, unlockAt, daysBeforeList);
 }
 
 /**
@@ -771,13 +748,8 @@ export async function createRemindersForLetter(
  */
 export async function getRemindersByLetterId(letterId: number): Promise<LetterReminder[]> {
   const db = await getDb();
-  if (!db) {
-    return [];
-  }
-
-  return await db.select().from(letterReminders)
-    .where(eq(letterReminders.letterId, letterId))
-    .orderBy(letterReminders.daysBefore);
+  if (!db) return [];
+  return ReminderLogic.getRemindersByLetterId(db, letterId);
 }
 
 /**
@@ -785,44 +757,8 @@ export async function getRemindersByLetterId(letterId: number): Promise<LetterRe
  */
 export async function getPendingReminders(limit: number = 100): Promise<(LetterReminder & { letter: Letter | null; user: { email: string | null; notificationEmail: string | null } | null })[]> {
   const db = await getDb();
-  if (!db) {
-    return [];
-  }
-
-  const now = new Date();
-  
-  // pendingかつscheduledAt <= nowのリマインダーを取得
-  const reminders = await db.select().from(letterReminders)
-    .where(and(
-      eq(letterReminders.status, "pending"),
-      // scheduledAt <= now
-    ))
-    .limit(limit);
-
-  // scheduledAt <= now でフィルタリング（drizzle-ormのlte演算子を使用）
-  const filteredReminders = reminders.filter(r => r.scheduledAt <= now);
-
-  // 各リマインダーに手紙とユーザー情報を付加
-  const result = await Promise.all(filteredReminders.map(async (reminder) => {
-    const letter = await db.select().from(letters)
-      .where(eq(letters.id, reminder.letterId))
-      .limit(1);
-    
-    const user = await db.select({
-      email: users.email,
-      notificationEmail: users.notificationEmail,
-    }).from(users)
-      .where(eq(users.id, reminder.ownerUserId))
-      .limit(1);
-
-    return {
-      ...reminder,
-      letter: letter[0] || null,
-      user: user[0] || null,
-    };
-  }));
-
-  return result;
+  if (!db) return [];
+  return ReminderLogic.getPendingReminders(db, limit);
 }
 
 /**
@@ -830,23 +766,8 @@ export async function getPendingReminders(limit: number = 100): Promise<(LetterR
  */
 export async function markReminderAsSent(reminderId: number): Promise<boolean> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  // sentAt IS NULL の条件で更新（二重送信防止）
-  const result = await db.update(letterReminders)
-    .set({
-      sentAt: new Date(),
-      status: "sent",
-    })
-    .where(and(
-      eq(letterReminders.id, reminderId),
-      eq(letterReminders.status, "pending")
-    ));
-
-  // 更新件数が0なら既に送信済み
-  return (result[0].affectedRows ?? 0) > 0;
+  if (!db) throw new Error("Database not available");
+  return ReminderLogic.markReminderAsSent(db, reminderId);
 }
 
 /**
@@ -854,23 +775,15 @@ export async function markReminderAsSent(reminderId: number): Promise<boolean> {
  */
 export async function markReminderAsFailed(reminderId: number, error: string): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  await db.update(letterReminders)
-    .set({
-      status: "failed",
-      lastError: error,
-    })
-    .where(eq(letterReminders.id, reminderId));
+  if (!db) throw new Error("Database not available");
+  return ReminderLogic.markReminderAsFailed(db, reminderId, error);
 }
 
 /**
  * 手紙のリマインダーを更新（未送信のみ再計算、送信済みは保持）
  * @param letterId 手紙ID
  * @param ownerUserId オーナーユーザーID
- * @param unlockAt 新しい開封日時
+ * @param unlockAt 開封日時
  * @param daysBeforeList X日前のリスト（例: [90, 30, 7, 1]）
  */
 export async function updateLetterReminders(
@@ -880,47 +793,8 @@ export async function updateLetterReminders(
   daysBeforeList: number[]
 ): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  // 既存のリマインダーを取得
-  const existingReminders = await db.select().from(letterReminders)
-    .where(eq(letterReminders.letterId, letterId));
-
-  // 送信済みのリマインダーを保持
-  const sentReminders = existingReminders.filter(r => r.status === "sent");
-  const sentDaysBefore = new Set(sentReminders.map(r => r.daysBefore));
-
-  // 未送信のリマインダーを削除
-  await db.delete(letterReminders).where(and(
-    eq(letterReminders.letterId, letterId),
-    eq(letterReminders.status, "pending")
-  ));
-
-  // 新しいリマインダーを作成（送信済みでないもののみ）
-  for (const daysBefore of daysBeforeList) {
-    // 既に送信済みの日数はスキップ
-    if (sentDaysBefore.has(daysBefore)) {
-      continue;
-    }
-
-    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1000);
-    
-    // 過去の日付はスキップ
-    if (scheduledAt <= new Date()) {
-      continue;
-    }
-
-    await db.insert(letterReminders).values({
-      letterId,
-      ownerUserId,
-      type: "before_unlock",
-      daysBefore,
-      scheduledAt,
-      status: "pending",
-    });
-  }
+  if (!db) throw new Error("Database not available");
+  return ReminderLogic.updateLetterReminders(db, letterId, ownerUserId, unlockAt, daysBeforeList);
 }
 
 /**
@@ -928,11 +802,8 @@ export async function updateLetterReminders(
  */
 export async function deleteRemindersByLetterId(letterId: number): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  await db.delete(letterReminders).where(eq(letterReminders.letterId, letterId));
+  if (!db) throw new Error("Database not available");
+  return ReminderLogic.deleteRemindersByLetterId(db, letterId);
 }
 
 
@@ -945,12 +816,8 @@ export async function deleteRemindersByLetterId(letterId: number): Promise<void>
  */
 export async function getShareTokenRecord(token: string): Promise<LetterShareToken | undefined> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  const result = await db.select().from(letterShareTokens).where(eq(letterShareTokens.token, token)).limit(1);
-  return result[0];
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.getShareTokenRecord(db, token);
 }
 
 /**
@@ -958,119 +825,36 @@ export async function getShareTokenRecord(token: string): Promise<LetterShareTok
  */
 export async function getActiveShareToken(letterId: number): Promise<LetterShareToken | undefined> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  const result = await db.select()
-    .from(letterShareTokens)
-    .where(and(
-      eq(letterShareTokens.letterId, letterId),
-      eq(letterShareTokens.status, "active")
-    ))
-    .limit(1);
-  return result[0];
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.getActiveShareToken(db, letterId);
 }
 
 /**
  * 新しい共有トークンを作成
  */
 export async function createShareToken(letterId: number, token: string): Promise<{ success: boolean; token: string }> {
+  /* Logic delegated */
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  // 既存のactiveトークンがあれば先に無効化（常に1つだけactiveを保証）
-  const existingActive = await getActiveShareToken(letterId);
-  if (existingActive) {
-    await db.update(letterShareTokens)
-      .set({
-        status: "rotated",
-        revokedAt: new Date(),
-        replacedByToken: token,
-      })
-      .where(eq(letterShareTokens.id, existingActive.id));
-  }
-  
-  await db.insert(letterShareTokens).values({
-    token,
-    letterId,
-    status: "active",
-    viewCount: 0,
-  });
-  return { success: true, token };
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.createShareToken(db, letterId, token);
 }
 
 /**
  * 共有トークンを無効化（revoke）
- * - activeなトークンをrevokedに変更
- * - 既にrevokedなら何もしない（idempotent）
  */
 export async function revokeShareToken(letterId: number, reason?: string): Promise<{ success: boolean; wasActive: boolean }> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  // activeなトークンを取得
-  const activeToken = await getActiveShareToken(letterId);
-  if (!activeToken) {
-    // activeなトークンがない（既にrevoked/rotatedか、まだ作成されていない）
-    return { success: true, wasActive: false };
-  }
-
-  // 原子的更新: status=activeの場合のみ更新
-  await db.update(letterShareTokens)
-    .set({
-      status: "revoked",
-      revokedAt: new Date(),
-      revokeReason: reason || null,
-    })
-    .where(and(
-      eq(letterShareTokens.id, activeToken.id),
-      eq(letterShareTokens.status, "active")
-    ));
-
-  return { success: true, wasActive: true };
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.revokeShareToken(db, letterId, reason);
 }
 
 /**
  * 共有トークンを再発行（rotate）
- * - activeなトークンをrotatedに変更
- * - 新しいactiveトークンを作成
- * - activeなトークンがない場合は新規作成
  */
 export async function rotateShareToken(letterId: number, newToken: string): Promise<{ success: boolean; newToken: string; oldToken?: string }> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  // activeなトークンを取得
-  const activeToken = await getActiveShareToken(letterId);
-  
-  if (activeToken) {
-    // 既存のactiveトークンをrotatedに変更
-    await db.update(letterShareTokens)
-      .set({
-        status: "rotated",
-        revokedAt: new Date(),
-        replacedByToken: newToken,
-      })
-      .where(and(
-        eq(letterShareTokens.id, activeToken.id),
-        eq(letterShareTokens.status, "active")
-      ));
-  }
-
-  // 新しいactiveトークンを作成
-  await createShareToken(letterId, newToken);
-
-  return {
-    success: true,
-    newToken,
-    oldToken: activeToken?.token,
-  };
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.rotateShareToken(db, letterId, newToken);
 }
 
 /**
@@ -1078,42 +862,17 @@ export async function rotateShareToken(letterId: number, newToken: string): Prom
  */
 export async function incrementShareTokenViewCount(token: string): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  const tokenRecord = await getShareTokenRecord(token);
-  if (!tokenRecord) return;
-
-  await db.update(letterShareTokens)
-    .set({
-      viewCount: tokenRecord.viewCount + 1,
-      lastAccessedAt: new Date(),
-    })
-    .where(eq(letterShareTokens.token, token));
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.incrementShareTokenViewCount(db, token);
 }
 
 /**
  * 既存のletters.shareTokenをletterShareTokensに移行
- * - 既にletterShareTokensにactiveなトークンがあればスキップ
- * - letters.shareTokenが存在すればactiveとして移行
  */
 export async function migrateShareTokenIfNeeded(letterId: number, legacyToken: string): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  // 既にactiveなトークンがあればスキップ
-  const existingActive = await getActiveShareToken(letterId);
-  if (existingActive) return;
-
-  // 既に同じトークンが存在するかチェック
-  const existingToken = await getShareTokenRecord(legacyToken);
-  if (existingToken) return;
-
-  // 移行: letters.shareTokenをactiveとして追加
-  await createShareToken(letterId, legacyToken);
+  if (!db) throw new Error("Database not available");
+  return ShareTokenLogic.migrateShareTokenIfNeeded(db, letterId, legacyToken);
 }
 
 
@@ -1155,4 +914,363 @@ export async function regenerateUnlockCode(
     .where(eq(letters.id, letterId));
 
   return true;
+}
+
+
+// ============================================
+// 公開スコープ関連（PRIVATE/FAMILY/LINK）
+// ============================================
+
+/**
+ * ユーザーが所属する家族IDリストを取得
+ */
+export async function getUserFamilyIds(userId: number): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const memberships = await db.select({ familyId: familyMembers.familyId })
+    .from(familyMembers)
+    .where(eq(familyMembers.userId, userId));
+
+  return memberships.map(m => m.familyId);
+}
+
+/**
+ * ユーザーが指定のfamilyのメンバーかどうか判定
+ */
+export async function isUserFamilyMember(userId: number, familyId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db.select({ id: familyMembers.id })
+    .from(familyMembers)
+    .where(and(eq(familyMembers.userId, userId), eq(familyMembers.familyId, familyId)))
+    .limit(1);
+
+  return result.length > 0;
+}
+
+/**
+ * 手紙へのアクセス権限判定（共通関数）
+ * PRIVATEはauthorIdのみ、FAMILYはメンバーのみ、LINKは別経路（shareToken）
+ * 
+ * 注意: この関数は「一覧取得」には使わない（WHERE句で分離すべき）
+ * 個別取得の権限チェックに使用する
+ */
+export async function canAccessLetter(userId: number, letter: Letter): Promise<boolean> {
+  if (letter.visibilityScope === "private") {
+    // PRIVATEはauthorIdのみ許可（存在秘匿）
+    return letter.authorId === userId;
+  }
+  if (letter.visibilityScope === "family") {
+    // FAMILYはメンバーのみ許可
+    if (!letter.familyId) return false;
+    return await isUserFamilyMember(userId, letter.familyId);
+  }
+  // link: shareToken経由でアクセス（この関数では判定しない）
+  return false;
+}
+
+/**
+ * スコープ別の手紙リスト取得（WHERE句で完全分離）
+ * 
+ * 重要: 各スコープは完全に分離されたクエリを使用
+ * PRIVATEが他スコープに混入することを防ぐ
+ */
+export async function getLettersByScope(userId: number, scope: "private" | "family" | "link"): Promise<Letter[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (scope === "private") {
+    // PRIVATE: 自分が作成 AND visibilityScope='private'
+    return await db.select().from(letters)
+      .where(and(
+        eq(letters.authorId, userId),
+        eq(letters.visibilityScope, "private")
+      ))
+      .orderBy(desc(letters.createdAt));
+  }
+
+  if (scope === "family") {
+    // FAMILY: familyId IN (user's memberships) AND visibilityScope='family'
+    const familyIds = await getUserFamilyIds(userId);
+    if (familyIds.length === 0) return [];
+
+    // 注意: authorIdでのOR条件は絶対に入れない（混線防止）
+    const result: Letter[] = [];
+    for (const fid of familyIds) {
+      const familyLetters = await db.select().from(letters)
+        .where(and(
+          eq(letters.familyId, fid),
+          eq(letters.visibilityScope, "family")
+        ))
+        .orderBy(desc(letters.createdAt));
+      result.push(...familyLetters);
+    }
+    // 日付順でソート
+    return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  if (scope === "link") {
+    // LINK: 自分が作成 AND visibilityScope='link'（送信者の管理用）
+    return await db.select().from(letters)
+      .where(and(
+        eq(letters.authorId, userId),
+        eq(letters.visibilityScope, "link")
+      ))
+      .orderBy(desc(letters.createdAt));
+  }
+
+  return [];
+}
+
+
+// ============================================
+// Family関連クエリ
+// ============================================
+
+/**
+ * 家族グループを作成（owner自身をmemberに追加）
+ */
+export async function createFamily(ownerUserId: number, name?: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(families).values({
+    ownerUserId,
+    name: name || "マイファミリー",
+  });
+  const familyId = result[0].insertId;
+
+  // owner自身をmemberに追加
+  await db.insert(familyMembers).values({
+    familyId,
+    userId: ownerUserId,
+    role: "owner",
+  });
+
+  return familyId;
+}
+
+/**
+ * オーナーの家族グループを取得
+ */
+export async function getFamilyByOwner(ownerUserId: number): Promise<Family | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(families)
+    .where(eq(families.ownerUserId, ownerUserId))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * ユーザーが所属する家族グループ一覧を取得
+ */
+export async function getFamilyMemberships(userId: number): Promise<Family[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const membershipIds = await getUserFamilyIds(userId);
+  if (membershipIds.length === 0) return [];
+
+  const result: Family[] = [];
+  for (const fid of membershipIds) {
+    const family = await db.select().from(families)
+      .where(eq(families.id, fid))
+      .limit(1);
+    if (family[0]) result.push(family[0]);
+  }
+  return result;
+}
+
+/**
+ * 家族メンバー一覧を取得
+ */
+export async function getFamilyMembers(familyId: number): Promise<(FamilyMember & { user?: { id: number; name: string | null; email: string | null } })[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const members = await db.select().from(familyMembers)
+    .where(eq(familyMembers.familyId, familyId));
+
+  // ユーザー情報を付加
+  const result = await Promise.all(members.map(async (m) => {
+    const user = await db.select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.id, m.userId))
+      .limit(1);
+    return { ...m, user: user[0] || undefined };
+  }));
+
+  return result;
+}
+
+/**
+ * 家族招待を作成
+ */
+export async function createFamilyInvite(familyId: number, invitedEmail: string, token: string, expiresAt: Date): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(familyInvites).values({
+    familyId,
+    invitedEmail,
+    token,
+    expiresAt,
+  });
+  return result[0].insertId;
+}
+
+/**
+ * 招待トークンで招待を取得
+ */
+export async function getFamilyInviteByToken(token: string): Promise<FamilyInvite | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(familyInvites)
+    .where(eq(familyInvites.token, token))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * 招待を受諾（membershipを作成、invite statusを更新）
+ */
+export async function acceptFamilyInvite(token: string, userId: number): Promise<{ success: boolean; error?: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const invite = await getFamilyInviteByToken(token);
+  if (!invite) {
+    return { success: false, error: "招待が見つかりません" };
+  }
+  if (invite.status !== "pending") {
+    return { success: false, error: "この招待は既に使用済みです" };
+  }
+  if (new Date() > invite.expiresAt) {
+    return { success: false, error: "この招待は期限切れです" };
+  }
+
+  // 既にメンバーかチェック
+  const alreadyMember = await isUserFamilyMember(userId, invite.familyId);
+  if (alreadyMember) {
+    return { success: false, error: "既にこのファミリーのメンバーです" };
+  }
+
+  // メンバーに追加
+  await db.insert(familyMembers).values({
+    familyId: invite.familyId,
+    userId,
+    role: "member",
+  });
+
+  // invite statusを更新
+  await db.update(familyInvites)
+    .set({ status: "accepted" })
+    .where(eq(familyInvites.id, invite.id));
+
+  return { success: true };
+}
+
+/**
+ * 家族の招待一覧を取得
+ */
+export async function getFamilyInvites(familyId: number): Promise<FamilyInvite[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select().from(familyInvites)
+    .where(eq(familyInvites.familyId, familyId))
+    .orderBy(desc(familyInvites.createdAt));
+}
+
+// ============================================
+// AIインタビュー関連
+// ============================================
+
+/**
+ * インタビューセッション作成
+ */
+export async function createInterviewSession(userId: number, recipientName?: string, topic?: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(interviewSessions).values({
+    userId,
+    recipientName: recipientName || "誰か",
+    topic: topic || "自分史",
+    status: "active",
+  });
+  return result[0].insertId;
+}
+
+/**
+ * インタビューセッション取得
+ */
+export async function getInterviewSession(sessionId: number): Promise<InterviewSession | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(interviewSessions)
+    .where(eq(interviewSessions.id, sessionId))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * ユーザーの進行中のセッションを取得
+ */
+export async function getActiveInterviewSession(userId: number): Promise<InterviewSession | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(interviewSessions)
+    .where(and(
+      eq(interviewSessions.userId, userId),
+      eq(interviewSessions.status, "active")
+    ))
+    .orderBy(desc(interviewSessions.createdAt))
+    .limit(1);
+  return result[0];
+}
+
+/**
+ * メッセージを追加
+ */
+export async function addInterviewMessage(sessionId: number, sender: "ai" | "user", content: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.insert(interviewMessages).values({
+    sessionId,
+    sender,
+    content,
+  });
+}
+
+/**
+ * チャット履歴を取得（古い順）
+ */
+export async function getInterviewHistory(sessionId: number): Promise<InterviewMessage[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select().from(interviewMessages)
+    .where(eq(interviewMessages.sessionId, sessionId))
+    .orderBy(interviewMessages.createdAt); // 古い順
+}
+
+/**
+ * セッションを完了にする
+ */
+export async function completeInterviewSession(sessionId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.update(interviewSessions)
+    .set({ status: "completed" })
+    .where(eq(interviewSessions.id, sessionId));
 }

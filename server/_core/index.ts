@@ -3,12 +3,53 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runReminderBatch } from "../reminderBatch";
 import { ENV } from "./env";
+
+// Export Express app for Cloud Functions
+export const app = express();
+
+// Configure body parser with larger size limit for file uploads
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Cron endpoint for reminder batch processing
+app.post("/api/cron/reminders", async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const expectedToken = ENV.forgeApiKey || ENV.geminiApiKey;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.slice(7) !== expectedToken) {
+    console.warn("[Cron] Unauthorized request to /api/cron/reminders");
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    console.log("[Cron] Running reminder batch...");
+    const result = await runReminderBatch();
+    console.log("[Cron] Reminder batch completed:", result);
+    return res.json({ success: true, result });
+  } catch (error) {
+    console.error("[Cron] Reminder batch failed:", error);
+    return res.status(500).json({ error: "Batch processing failed" });
+  }
+});
+
+// tRPC API
+app.use(
+  "/api/trpc",
+  createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  })
+);
+
+// Health check for Cloud Functions
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -30,45 +71,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
-  const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
 
-  // Cron endpoint for reminder batch processing
-  // POST /api/cron/reminders
-  // 認証: Bearer tokenまたはサービス間トークン
-  app.post("/api/cron/reminders", async (req, res) => {
-    // 簡易認証（本番環境ではより強固な認証を推奨）
-    const authHeader = req.headers.authorization;
-    const expectedToken = ENV.forgeApiKey;
-    
-    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.slice(7) !== expectedToken) {
-      console.warn("[Cron] Unauthorized request to /api/cron/reminders");
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    try {
-      console.log("[Cron] Running reminder batch...");
-      const result = await runReminderBatch();
-      console.log("[Cron] Reminder batch completed:", result);
-      return res.json({ success: true, result });
-    } catch (error) {
-      console.error("[Cron] Reminder batch failed:", error);
-      return res.status(500).json({ error: "Batch processing failed" });
-    }
-  });
-  // tRPC API
-  app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -88,4 +92,8 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+// Only start server if not being imported (for Cloud Functions)
+const isCloudFunctions = !!process.env.FUNCTIONS_EMULATOR || !!process.env.FUNCTION_TARGET;
+if (!isCloudFunctions) {
+  startServer().catch(console.error);
+}

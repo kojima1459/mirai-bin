@@ -161,6 +161,134 @@ export async function decryptLetter(
 }
 
 // ============================================
+// 音声暗号化（ゼロ知識設計）
+// ============================================
+
+/**
+ * masterKeyから音声用の暗号化キーを導出（HKDF）
+ * 
+ * - 本文暗号化とは別のキーを使用（用途分離）
+ * - info = "audio-v1" で区別
+ * 
+ * @param masterKeyBase64 Base64エンコードされたmasterKey（Shamir分割前の復号キー）
+ * @returns 音声暗号化用のCryptoKey
+ */
+export async function deriveAudioKey(masterKeyBase64: string): Promise<CryptoKey> {
+  const masterKeyBytes = base64ToArrayBuffer(masterKeyBase64);
+
+  // HKDFでキー導出
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    masterKeyBytes,
+    "HKDF",
+    false,
+    ["deriveKey"]
+  );
+
+  // 固定salt（音声暗号化用）- セキュリティ上は問題ない（infoで区別）
+  const salt = new Uint8Array(16); // all zeros
+  const info = new TextEncoder().encode("audio-v1");
+
+  return await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: salt,
+      info: info,
+    },
+    keyMaterial,
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    false, // not extractable
+    ["encrypt", "decrypt"]
+  );
+}
+
+/**
+ * 音声暗号化結果
+ */
+export interface AudioEncryptionResult {
+  ciphertext: ArrayBuffer;  // 暗号化された音声データ
+  iv: string;               // Base64エンコードされたIV
+  mimeType: string;         // 元の音声のMIMEタイプ
+  version: string;          // 暗号化バージョン（"audio-v1"）
+}
+
+/**
+ * 音声データを暗号化
+ * 
+ * @param audioBlob 録音された音声Blob
+ * @param masterKeyBase64 Base64エンコードされたmasterKey
+ * @returns 暗号化結果
+ */
+export async function encryptAudio(
+  audioBlob: Blob,
+  masterKeyBase64: string
+): Promise<AudioEncryptionResult> {
+  // 音声用キーを導出
+  const audioKey = await deriveAudioKey(masterKeyBase64);
+
+  // IV生成
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Blobをバイナリに変換
+  const audioData = await audioBlob.arrayBuffer();
+
+  // 暗号化
+  const encrypted = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv: iv,
+    },
+    audioKey,
+    audioData
+  );
+
+  return {
+    ciphertext: encrypted,
+    iv: arrayBufferToBase64(iv.buffer as ArrayBuffer),
+    mimeType: audioBlob.type,
+    version: "audio-v1",
+  };
+}
+
+/**
+ * 暗号化された音声を復号
+ * 
+ * @param encryptedData 暗号化された音声データ（ArrayBuffer）
+ * @param ivBase64 Base64エンコードされたIV
+ * @param masterKeyBase64 Base64エンコードされたmasterKey
+ * @param mimeType 音声のMIMEタイプ
+ * @returns 復号された音声Blob
+ */
+export async function decryptAudio(
+  encryptedData: ArrayBuffer,
+  ivBase64: string,
+  masterKeyBase64: string,
+  mimeType: string
+): Promise<Blob> {
+  // 音声用キーを導出
+  const audioKey = await deriveAudioKey(masterKeyBase64);
+
+  // IV復元
+  const iv = base64ToArrayBuffer(ivBase64);
+
+  // 復号
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: iv,
+    },
+    audioKey,
+    encryptedData
+  );
+
+  return new Blob([decrypted], { type: mimeType });
+}
+
+// ============================================
 // 解錠コードによるclientShare暗号化/復号
 // ============================================
 
@@ -222,13 +350,13 @@ export async function wrapClientShare(
 ): Promise<UnlockEnvelope> {
   // Salt生成（16バイト）
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  
+
   // PBKDF2で鍵導出
   const key = await deriveKeyFromUnlockCode(unlockCode, salt, KDF_ITERATIONS);
-  
+
   // IV生成（12バイト）
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  
+
   // clientShareを暗号化
   const encoder = new TextEncoder();
   const encrypted = await crypto.subtle.encrypt(
@@ -263,20 +391,20 @@ export async function unwrapClientShare(
 ): Promise<string> {
   // Salt復元
   const salt = new Uint8Array(base64UrlToArrayBuffer(envelope.wrappedClientShareSalt));
-  
+
   // PBKDF2で鍵導出
   const key = await deriveKeyFromUnlockCode(
     unlockCode,
     salt,
     envelope.wrappedClientShareKdfIters
   );
-  
+
   // IV復元
   const iv = new Uint8Array(base64UrlToArrayBuffer(envelope.wrappedClientShareIv));
-  
+
   // 暗号文復元
   const ciphertext = base64UrlToArrayBuffer(envelope.wrappedClientShare);
-  
+
   // 復号
   const decrypted = await crypto.subtle.decrypt(
     {
