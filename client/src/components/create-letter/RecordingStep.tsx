@@ -11,6 +11,7 @@ interface RecordingStepProps {
     onStopRecording: () => void;
     onResetRecording: () => void;
     base64: string | null;
+    audioUrl?: string;
     elapsed: number;
     remaining: number;
     maxDuration: number;
@@ -26,6 +27,7 @@ export function RecordingStep({
     onStopRecording,
     onResetRecording,
     base64,
+    audioUrl,
     elapsed,
     remaining,
     maxDuration,
@@ -73,6 +75,19 @@ export function RecordingStep({
                             <p className="text-lg font-bold text-white mb-1">録音完了！</p>
                             <p className="text-sm text-white/40">{elapsed}秒の音声を録音しました</p>
                         </div>
+
+                        {/* Audio Preview Player */}
+                        {audioUrl && (
+                            <div className="w-full bg-black/20 rounded-xl p-4 border border-white/5">
+                                <p className="text-xs text-white/40 mb-2 text-center">録音をプレビュー</p>
+                                <audio
+                                    controls
+                                    src={audioUrl}
+                                    className="w-full h-10 opacity-80 hover:opacity-100 transition-opacity"
+                                    style={{ filter: "invert(1)" }}
+                                />
+                            </div>
+                        )}
 
                         <div className="flex w-full gap-3 pt-4">
                             <Button

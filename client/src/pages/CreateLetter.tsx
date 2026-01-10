@@ -71,6 +71,7 @@ export default function CreateLetter() {
   const [reminderDays, setReminderDays] = useState<number[]>([1]);
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [encryptionProgress, setEncryptionProgress] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -125,7 +126,12 @@ export default function CreateLetter() {
   };
 
   const handleStopRecording = async () => {
-    await stopRecording();
+    const result = await stopRecording();
+    // Create local preview URL for audio playback before upload
+    if (result?.blob) {
+      const previewUrl = URL.createObjectURL(result.blob);
+      setAudioPreviewUrl(previewUrl);
+    }
   };
   const handleProceedToTranscription = async () => {
     if (!base64) return;
@@ -520,8 +526,12 @@ export default function CreateLetter() {
             isRecording={isRecording}
             onStartRecording={handleStartRecording}
             onStopRecording={handleStopRecording}
-            onResetRecording={resetRecording}
+            onResetRecording={() => {
+              resetRecording();
+              setAudioPreviewUrl(null);
+            }}
             base64={base64}
+            audioUrl={audioPreviewUrl || undefined}
             elapsed={elapsed}
             remaining={remaining}
             maxDuration={MAX_DURATION}

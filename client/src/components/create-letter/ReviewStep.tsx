@@ -185,8 +185,8 @@ export function ReviewStep({
                             {reminderEnabled && (
                                 <div className="pl-0 animate-in slide-in-from-top-2">
                                     <p className="text-xs text-indigo-200/60 mb-2">通知するタイミング:</p>
-                                    <div className="flex gap-2">
-                                        {[1, 3, 7].map((day) => (
+                                    <div className="flex flex-wrap gap-2">
+                                        {[1, 2, 3, 4, 5, 6, 7].map((day) => (
                                             <button
                                                 key={day}
                                                 onClick={() => toggleReminderDay(day)}

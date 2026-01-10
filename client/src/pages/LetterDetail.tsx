@@ -50,6 +50,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LetterPreviewDialog } from "@/components/LetterPreviewDialog";
 
 /**
  * Parse User-Agent string into a human-readable device description
@@ -98,6 +99,7 @@ export default function LetterDetail() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regeneratedCode, setRegeneratedCode] = useState<string | null>(null);
   const [regeneratedEnvelopeUrl, setRegeneratedEnvelopeUrl] = useState<string | null>(null);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
 
   // 手紙詳細を取得
   const { data: letter, isLoading: letterLoading } = trpc.letter.getById.useQuery(
@@ -243,7 +245,8 @@ export default function LetterDetail() {
     );
   };
 
-  const reminderDayOptions = [90, 30, 7, 1];
+
+  const reminderDayOptions = [1, 2, 3, 4, 5, 6, 7];
 
   // 再発行後の封筒PDF出力
   const handleExportRegeneratedPDF = (unlockCode: string, shareUrl: string | null) => {
@@ -555,8 +558,28 @@ export default function LetterDetail() {
                   </div>
                 )}
               </div>
+
+              {/* Preview Button */}
+              <div className="pt-4 mt-4 border-t border-white/5">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPreviewDialog(true)}
+                  className="w-full bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  受取人視点でプレビュー
+                </Button>
+              </div>
             </CardContent>
           </Card>
+
+          {/* Letter Preview Dialog */}
+          <LetterPreviewDialog
+            isOpen={showPreviewDialog}
+            onClose={() => setShowPreviewDialog(false)}
+            letter={letter}
+            content="（暗号化されたコンテンツ）"
+          />
 
           {/* スケジュール設定 */}
           <Card>
