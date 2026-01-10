@@ -22,7 +22,16 @@ var init_env = __esm({
       isProduction: process.env.NODE_ENV === "production",
       forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
       forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-      geminiApiKey: process.env.GEMINI_API_KEY ?? "AIzaSyBhm0YrR2ju8PMHKkU2F5_oSaSCoPPo8Qo"
+      geminiApiKey: process.env.GEMINI_API_KEY ?? "AIzaSyBhm0YrR2ju8PMHKkU2F5_oSaSCoPPo8Qo",
+      // Email configuration
+      sendgridApiKey: process.env.SENDGRID_API_KEY ?? "",
+      mailFrom: process.env.MAIL_FROM ?? "noreply@miraibin.web.app",
+      mailProvider: process.env.MAIL_PROVIDER ?? "mock",
+      appBaseUrl: process.env.APP_BASE_URL ?? "https://miraibin.web.app",
+      // Push notification (VAPID)
+      vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+      vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+      pushSubject: process.env.PUSH_SUBJECT ?? "mailto:noreply@miraibin.web.app"
     };
     if (ENV.isProduction) {
       const missingEnvs = [];
@@ -129,361 +138,250 @@ var init_notification = __esm({
   }
 });
 
-// server/_core/vite.ts
-var vite_exports = {};
-__export(vite_exports, {
-  setupVite: () => setupVite
-});
-import fs2 from "fs";
-import { nanoid as nanoid2 } from "nanoid";
-import path2 from "path";
-async function setupVite(app2, server) {
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true
-  };
-  const { createServer: createViteServer } = await import("vite");
-  const vite = await createViteServer({
-    configFile: path2.resolve(import.meta.dirname, "../../vite.config.ts"),
-    server: serverOptions,
-    appType: "custom"
-  });
-  app2.use(vite.middlewares);
-  app2.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-    try {
-      const clientTemplate = path2.resolve(
-        import.meta.dirname,
-        "../..",
-        "client",
-        "index.html"
-      );
-      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid2()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
-    } catch (e) {
-      vite.ssrFixStacktrace(e);
-      next(e);
-    }
-  });
-}
-var init_vite = __esm({
-  "server/_core/vite.ts"() {
-    "use strict";
-  }
-});
-
-// server/_core/index.ts
-import "dotenv/config";
-import express2 from "express";
-import { createServer } from "http";
-import net from "net";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-
-// shared/const.ts
-var COOKIE_NAME = "app_session_id";
-var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
-var UNAUTHED_ERR_MSG = "Please login (10001)";
-var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
-
-// server/_core/cookies.ts
-function isSecureRequest(req) {
-  if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
-}
-function getSessionCookieOptions(req) {
-  return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req)
-  };
-}
-
-// server/_core/systemRouter.ts
-init_notification();
-import { z } from "zod";
-
-// server/_core/trpc.ts
-import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
-import superjson from "superjson";
-var t = initTRPC.context().create({
-  transformer: superjson
-});
-var router = t.router;
-var publicProcedure = t.procedure;
-var requireUser = t.middleware(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
-  }
-  return next({
-    ctx: {
-      ...ctx,
-      user: ctx.user
-    }
-  });
-});
-var protectedProcedure = t.procedure.use(requireUser);
-var adminProcedure = t.procedure.use(
-  t.middleware(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user
-      }
-    });
-  })
-);
-
-// server/_core/systemRouter.ts
-var systemRouter = router({
-  health: publicProcedure.input(
-    z.object({
-      timestamp: z.number().min(0, "timestamp cannot be negative")
-    })
-  ).query(() => ({
-    ok: true
-  })),
-  notifyOwner: adminProcedure.input(
-    z.object({
-      title: z.string().min(1, "title is required"),
-      content: z.string().min(1, "content is required")
-    })
-  ).mutation(async ({ input }) => {
-    const delivered = await notifyOwner(input);
-    return {
-      success: delivered
-    };
-  })
-});
-
-// server/routers.ts
-import { z as z2 } from "zod";
-
-// server/db.ts
-import { eq as eq3, and as and3, desc as desc2 } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-
 // drizzle/schema.ts
 import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
-var users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  notificationEmail: varchar("notificationEmail", { length: 320 }),
-  // 未設定ならemailを使用
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
+var users, letters, templates, drafts, letterReminders, letterShareTokens, families, familyMembers, familyInvites, interviewSessions, interviewMessages, notifications, pushSubscriptions;
+var init_schema = __esm({
+  "drizzle/schema.ts"() {
+    "use strict";
+    users = mysqlTable("users", {
+      id: int("id").autoincrement().primaryKey(),
+      openId: varchar("openId", { length: 64 }).notNull().unique(),
+      name: text("name"),
+      email: varchar("email", { length: 320 }),
+      loginMethod: varchar("loginMethod", { length: 64 }),
+      role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+      notificationEmail: varchar("notificationEmail", { length: 320 }),
+      // 未設定ならemailを使用
+      trustedContactEmail: varchar("trustedContactEmail", { length: 320 }),
+      // 信頼できる通知先（配偶者等）
+      // リマインド通知設定
+      notifyEnabled: boolean("notifyEnabled").default(true).notNull(),
+      // 通知を受け取るか
+      notifyDaysBefore: int("notifyDaysBefore").default(7).notNull(),
+      // 何日前に通知（1,3,7,30,90,365）
+      // メール検証
+      notificationEmailVerified: boolean("notificationEmailVerified").default(false).notNull(),
+      notificationEmailVerifyToken: varchar("notificationEmailVerifyToken", { length: 64 }),
+      notificationEmailVerifyExpiresAt: timestamp("notificationEmailVerifyExpiresAt"),
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+      lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
+    });
+    letters = mysqlTable("letters", {
+      id: int("id").autoincrement().primaryKey(),
+      authorId: int("authorId").notNull(),
+      // 公開スコープ: private(自分のみ), family(家族グループ), link(URL共有)
+      visibilityScope: mysqlEnum("visibilityScope", ["private", "family", "link"]).default("private").notNull(),
+      familyId: int("familyId"),
+      // FAMILYスコープ時のみ設定
+      // 受取人情報
+      recipientName: varchar("recipientName", { length: 100 }),
+      recipientRelation: varchar("recipientRelation", { length: 50 }),
+      // 音声データ（URL参照のみ、本文は保存しない）
+      audioUrl: varchar("audioUrl", { length: 500 }),
+      audioDuration: int("audioDuration"),
+      // 暗号化済み音声（ゼロ知識設計）
+      // - クライアント側で暗号化された音声の保存先URL
+      // - 復号鍵はmasterKeyからHKDFで導出（本文とは別キー）
+      encryptedAudioUrl: varchar("encryptedAudioUrl", { length: 500 }),
+      encryptedAudioIv: varchar("encryptedAudioIv", { length: 255 }),
+      encryptedAudioMimeType: varchar("encryptedAudioMimeType", { length: 100 }),
+      encryptedAudioByteSize: int("encryptedAudioByteSize"),
+      encryptedAudioDurationSec: int("encryptedAudioDurationSec"),
+      encryptedAudioCryptoVersion: varchar("encryptedAudioCryptoVersion", { length: 20 }),
+      // テンプレート情報（本文は保存しない）
+      templateUsed: varchar("templateUsed", { length: 50 }),
+      // 暗号化関連（ゼロ知識: 暗号文のみ保存）
+      isEncrypted: boolean("isEncrypted").default(true).notNull(),
+      encryptionIv: varchar("encryptionIv", { length: 255 }).notNull(),
+      ciphertextUrl: varchar("ciphertextUrl", { length: 500 }).notNull(),
+      // 証跡関連
+      proofHash: varchar("proofHash", { length: 64 }).notNull(),
+      proofProvider: varchar("proofProvider", { length: 50 }).default("local"),
+      txHash: varchar("txHash", { length: 66 }),
+      proofCreatedAt: timestamp("proofCreatedAt"),
+      // OpenTimestamps関連
+      otsFileUrl: varchar("otsFileUrl", { length: 500 }),
+      otsStatus: varchar("otsStatus", { length: 20 }).default("pending"),
+      // pending, submitted, confirmed
+      otsSubmittedAt: timestamp("otsSubmittedAt"),
+      otsConfirmedAt: timestamp("otsConfirmedAt"),
+      // 開封関連
+      unlockAt: timestamp("unlockAt"),
+      unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
+      isUnlocked: boolean("isUnlocked").default(false).notNull(),
+      unlockedAt: timestamp("unlockedAt"),
+      // 共有リンク関連
+      shareToken: varchar("shareToken", { length: 64 }).unique(),
+      viewCount: int("viewCount").default(0).notNull(),
+      lastViewedAt: timestamp("lastViewedAt"),
+      // Shamirシェア（ゼロ知識設計）
+      // - serverShare: 開封日時後にのみ提供
+      // - clientShareは解錠コードで暗号化してwrappedClientShareとして保存
+      // - backupShareはサーバーに保存しない（ユーザーが保管）
+      serverShare: text("serverShare"),
+      useShamir: boolean("useShamir").default(true).notNull(),
+      // 解錠コードで暗号化されたclientShare（封筒）
+      wrappedClientShare: text("wrappedClientShare"),
+      wrappedClientShareIv: varchar("wrappedClientShareIv", { length: 255 }),
+      wrappedClientShareSalt: varchar("wrappedClientShareSalt", { length: 255 }),
+      wrappedClientShareKdf: varchar("wrappedClientShareKdf", { length: 50 }),
+      wrappedClientShareKdfIters: int("wrappedClientShareKdfIters"),
+      // 解錠コード再発行（1回のみ）
+      unlockCodeRegeneratedAt: timestamp("unlockCodeRegeneratedAt"),
+      // メタデータ
+      status: varchar("status", { length: 20 }).default("draft").notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+    });
+    templates = mysqlTable("templates", {
+      id: int("id").autoincrement().primaryKey(),
+      name: varchar("name", { length: 50 }).notNull().unique(),
+      displayName: varchar("displayName", { length: 100 }).notNull(),
+      subtitle: varchar("subtitle", { length: 200 }),
+      // 1行説明
+      description: text("description"),
+      category: varchar("category", { length: 50 }).default("emotion").notNull(),
+      // emotion/parent-truth/ritual/milestone
+      prompt: text("prompt").notNull(),
+      recordingPrompt: text("recordingPrompt").notNull(),
+      recordingGuide: text("recordingGuide"),
+      // 90秒で話す順番（JSON）
+      exampleOneLiner: text("exampleOneLiner"),
+      icon: varchar("icon", { length: 50 }),
+      isRecommended: boolean("isRecommended").default(false).notNull(),
+      // おすすめ3つ
+      sortOrder: int("sortOrder").default(100).notNull(),
+      // 表示順
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    drafts = mysqlTable("drafts", {
+      id: int("id").autoincrement().primaryKey(),
+      userId: int("userId").notNull(),
+      // テンプレート情報
+      templateName: varchar("templateName", { length: 50 }),
+      // 受取人情報
+      recipientName: varchar("recipientName", { length: 100 }),
+      recipientRelation: varchar("recipientRelation", { length: 50 }),
+      // 音声データ
+      audioUrl: varchar("audioUrl", { length: 500 }),
+      audioBase64: text("audioBase64"),
+      // 文字起こし・下書き（封緘前なので平文保存）
+      transcription: text("transcription"),
+      aiDraft: text("aiDraft"),
+      finalContent: text("finalContent"),
+      // 開封日時
+      unlockAt: timestamp("unlockAt"),
+      // 進捗状態
+      currentStep: varchar("currentStep", { length: 20 }).default("template").notNull(),
+      // メタデータ
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+    });
+    letterReminders = mysqlTable("letter_reminders", {
+      id: int("id").autoincrement().primaryKey(),
+      letterId: int("letterId").notNull(),
+      ownerUserId: int("ownerUserId").notNull(),
+      // リマインダー種別
+      type: varchar("type", { length: 50 }).default("before_unlock").notNull(),
+      // before_unlock
+      daysBefore: int("daysBefore").notNull(),
+      // 90, 30, 7, 1
+      // スケジュール
+      scheduledAt: timestamp("scheduledAt").notNull(),
+      // unlockAt - daysBefore
+      sentAt: timestamp("sentAt"),
+      // 送信済みならセット
+      // ステータス
+      status: varchar("status", { length: 20 }).default("pending").notNull(),
+      // pending, sent, failed
+      lastError: text("lastError"),
+      // メタデータ
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+    });
+    letterShareTokens = mysqlTable("letter_share_tokens", {
+      id: int("id").autoincrement().primaryKey(),
+      token: varchar("token", { length: 64 }).notNull().unique(),
+      letterId: int("letterId").notNull(),
+      // ステータス: active（有効）, revoked（無効化）, rotated（置換済み）
+      status: varchar("status", { length: 20 }).default("active").notNull(),
+      // 置換時の新トークン（rotated時のみ）
+      replacedByToken: varchar("replacedByToken", { length: 64 }),
+      // 失効理由（任意）
+      revokeReason: varchar("revokeReason", { length: 255 }),
+      // アクセス統計
+      viewCount: int("viewCount").default(0).notNull(),
+      lastAccessedAt: timestamp("lastAccessedAt"),
+      // タイムスタンプ
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      revokedAt: timestamp("revokedAt")
+    });
+    families = mysqlTable("families", {
+      id: int("id").autoincrement().primaryKey(),
+      ownerUserId: int("ownerUserId").notNull(),
+      name: varchar("name", { length: 100 }).default("\u30DE\u30A4\u30D5\u30A1\u30DF\u30EA\u30FC"),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    familyMembers = mysqlTable("family_members", {
+      id: int("id").autoincrement().primaryKey(),
+      familyId: int("familyId").notNull(),
+      userId: int("userId").notNull(),
+      role: mysqlEnum("role", ["owner", "member"]).default("member").notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    familyInvites = mysqlTable("family_invites", {
+      id: int("id").autoincrement().primaryKey(),
+      familyId: int("familyId").notNull(),
+      invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(),
+      token: varchar("token", { length: 64 }).notNull().unique(),
+      status: mysqlEnum("status", ["pending", "accepted", "revoked"]).default("pending").notNull(),
+      expiresAt: timestamp("expiresAt").notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    interviewSessions = mysqlTable("interview_sessions", {
+      id: int("id").autoincrement().primaryKey(),
+      userId: int("userId").notNull(),
+      recipientName: varchar("recipientName", { length: 100 }),
+      // 誰宛か
+      topic: varchar("topic", { length: 100 }),
+      // 話題（自分史、感謝、謝罪etc）
+      status: mysqlEnum("status", ["active", "completed"]).default("active").notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    interviewMessages = mysqlTable("interview_messages", {
+      id: int("id").autoincrement().primaryKey(),
+      sessionId: int("sessionId").notNull(),
+      sender: mysqlEnum("sender", ["ai", "user"]).notNull(),
+      content: text("content").notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    notifications = mysqlTable("notifications", {
+      id: int("id").autoincrement().primaryKey(),
+      userId: int("userId").notNull(),
+      type: varchar("type", { length: 50 }).notNull(),
+      // reminder_before_unlock, letter_opened, family_invite
+      title: varchar("title", { length: 255 }).notNull(),
+      body: text("body").notNull(),
+      meta: text("meta"),
+      // JSON: { letterId, recipientLabel, daysRemaining }
+      readAt: timestamp("readAt"),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    pushSubscriptions = mysqlTable("push_subscriptions", {
+      id: int("id").autoincrement().primaryKey(),
+      userId: int("userId").notNull(),
+      endpoint: varchar("endpoint", { length: 500 }).notNull().unique(),
+      p256dh: varchar("p256dh", { length: 255 }).notNull(),
+      auth: varchar("auth", { length: 64 }).notNull(),
+      userAgent: varchar("userAgent", { length: 255 }),
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+      revokedAt: timestamp("revokedAt")
+    });
+  }
 });
-var letters = mysqlTable("letters", {
-  id: int("id").autoincrement().primaryKey(),
-  authorId: int("authorId").notNull(),
-  // 公開スコープ: private(自分のみ), family(家族グループ), link(URL共有)
-  visibilityScope: mysqlEnum("visibilityScope", ["private", "family", "link"]).default("private").notNull(),
-  familyId: int("familyId"),
-  // FAMILYスコープ時のみ設定
-  // 受取人情報
-  recipientName: varchar("recipientName", { length: 100 }),
-  recipientRelation: varchar("recipientRelation", { length: 50 }),
-  // 音声データ（URL参照のみ、本文は保存しない）
-  audioUrl: varchar("audioUrl", { length: 500 }),
-  audioDuration: int("audioDuration"),
-  // 暗号化済み音声（ゼロ知識設計）
-  // - クライアント側で暗号化された音声の保存先URL
-  // - 復号鍵はmasterKeyからHKDFで導出（本文とは別キー）
-  encryptedAudioUrl: varchar("encryptedAudioUrl", { length: 500 }),
-  encryptedAudioIv: varchar("encryptedAudioIv", { length: 255 }),
-  encryptedAudioMimeType: varchar("encryptedAudioMimeType", { length: 100 }),
-  encryptedAudioByteSize: int("encryptedAudioByteSize"),
-  encryptedAudioDurationSec: int("encryptedAudioDurationSec"),
-  encryptedAudioCryptoVersion: varchar("encryptedAudioCryptoVersion", { length: 20 }),
-  // テンプレート情報（本文は保存しない）
-  templateUsed: varchar("templateUsed", { length: 50 }),
-  // 暗号化関連（ゼロ知識: 暗号文のみ保存）
-  isEncrypted: boolean("isEncrypted").default(true).notNull(),
-  encryptionIv: varchar("encryptionIv", { length: 255 }).notNull(),
-  ciphertextUrl: varchar("ciphertextUrl", { length: 500 }).notNull(),
-  // 証跡関連
-  proofHash: varchar("proofHash", { length: 64 }).notNull(),
-  proofProvider: varchar("proofProvider", { length: 50 }).default("local"),
-  txHash: varchar("txHash", { length: 66 }),
-  proofCreatedAt: timestamp("proofCreatedAt"),
-  // OpenTimestamps関連
-  otsFileUrl: varchar("otsFileUrl", { length: 500 }),
-  otsStatus: varchar("otsStatus", { length: 20 }).default("pending"),
-  // pending, submitted, confirmed
-  otsSubmittedAt: timestamp("otsSubmittedAt"),
-  otsConfirmedAt: timestamp("otsConfirmedAt"),
-  // 開封関連
-  unlockAt: timestamp("unlockAt"),
-  unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
-  isUnlocked: boolean("isUnlocked").default(false).notNull(),
-  unlockedAt: timestamp("unlockedAt"),
-  // 共有リンク関連
-  shareToken: varchar("shareToken", { length: 64 }).unique(),
-  viewCount: int("viewCount").default(0).notNull(),
-  lastViewedAt: timestamp("lastViewedAt"),
-  // Shamirシェア（ゼロ知識設計）
-  // - serverShare: 開封日時後にのみ提供
-  // - clientShareは解錠コードで暗号化してwrappedClientShareとして保存
-  // - backupShareはサーバーに保存しない（ユーザーが保管）
-  serverShare: text("serverShare"),
-  useShamir: boolean("useShamir").default(true).notNull(),
-  // 解錠コードで暗号化されたclientShare（封筒）
-  wrappedClientShare: text("wrappedClientShare"),
-  wrappedClientShareIv: varchar("wrappedClientShareIv", { length: 255 }),
-  wrappedClientShareSalt: varchar("wrappedClientShareSalt", { length: 255 }),
-  wrappedClientShareKdf: varchar("wrappedClientShareKdf", { length: 50 }),
-  wrappedClientShareKdfIters: int("wrappedClientShareKdfIters"),
-  // 解錠コード再発行（1回のみ）
-  unlockCodeRegeneratedAt: timestamp("unlockCodeRegeneratedAt"),
-  // メタデータ
-  status: varchar("status", { length: 20 }).default("draft").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
-});
-var templates = mysqlTable("templates", {
-  id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 50 }).notNull().unique(),
-  displayName: varchar("displayName", { length: 100 }).notNull(),
-  subtitle: varchar("subtitle", { length: 200 }),
-  // 1行説明
-  description: text("description"),
-  category: varchar("category", { length: 50 }).default("emotion").notNull(),
-  // emotion/parent-truth/ritual/milestone
-  prompt: text("prompt").notNull(),
-  recordingPrompt: text("recordingPrompt").notNull(),
-  recordingGuide: text("recordingGuide"),
-  // 90秒で話す順番（JSON）
-  exampleOneLiner: text("exampleOneLiner"),
-  icon: varchar("icon", { length: 50 }),
-  isRecommended: boolean("isRecommended").default(false).notNull(),
-  // おすすめ3つ
-  sortOrder: int("sortOrder").default(100).notNull(),
-  // 表示順
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-var drafts = mysqlTable("drafts", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  // テンプレート情報
-  templateName: varchar("templateName", { length: 50 }),
-  // 受取人情報
-  recipientName: varchar("recipientName", { length: 100 }),
-  recipientRelation: varchar("recipientRelation", { length: 50 }),
-  // 音声データ
-  audioUrl: varchar("audioUrl", { length: 500 }),
-  audioBase64: text("audioBase64"),
-  // 文字起こし・下書き（封緘前なので平文保存）
-  transcription: text("transcription"),
-  aiDraft: text("aiDraft"),
-  finalContent: text("finalContent"),
-  // 開封日時
-  unlockAt: timestamp("unlockAt"),
-  // 進捗状態
-  currentStep: varchar("currentStep", { length: 20 }).default("template").notNull(),
-  // メタデータ
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
-});
-var letterReminders = mysqlTable("letter_reminders", {
-  id: int("id").autoincrement().primaryKey(),
-  letterId: int("letterId").notNull(),
-  ownerUserId: int("ownerUserId").notNull(),
-  // リマインダー種別
-  type: varchar("type", { length: 50 }).default("before_unlock").notNull(),
-  // before_unlock
-  daysBefore: int("daysBefore").notNull(),
-  // 90, 30, 7, 1
-  // スケジュール
-  scheduledAt: timestamp("scheduledAt").notNull(),
-  // unlockAt - daysBefore
-  sentAt: timestamp("sentAt"),
-  // 送信済みならセット
-  // ステータス
-  status: varchar("status", { length: 20 }).default("pending").notNull(),
-  // pending, sent, failed
-  lastError: text("lastError"),
-  // メタデータ
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
-});
-var letterShareTokens = mysqlTable("letter_share_tokens", {
-  id: int("id").autoincrement().primaryKey(),
-  token: varchar("token", { length: 64 }).notNull().unique(),
-  letterId: int("letterId").notNull(),
-  // ステータス: active（有効）, revoked（無効化）, rotated（置換済み）
-  status: varchar("status", { length: 20 }).default("active").notNull(),
-  // 置換時の新トークン（rotated時のみ）
-  replacedByToken: varchar("replacedByToken", { length: 64 }),
-  // 失効理由（任意）
-  revokeReason: varchar("revokeReason", { length: 255 }),
-  // アクセス統計
-  viewCount: int("viewCount").default(0).notNull(),
-  lastAccessedAt: timestamp("lastAccessedAt"),
-  // タイムスタンプ
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  revokedAt: timestamp("revokedAt")
-});
-var families = mysqlTable("families", {
-  id: int("id").autoincrement().primaryKey(),
-  ownerUserId: int("ownerUserId").notNull(),
-  name: varchar("name", { length: 100 }).default("\u30DE\u30A4\u30D5\u30A1\u30DF\u30EA\u30FC"),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-var familyMembers = mysqlTable("family_members", {
-  id: int("id").autoincrement().primaryKey(),
-  familyId: int("familyId").notNull(),
-  userId: int("userId").notNull(),
-  role: mysqlEnum("role", ["owner", "member"]).default("member").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-var familyInvites = mysqlTable("family_invites", {
-  id: int("id").autoincrement().primaryKey(),
-  familyId: int("familyId").notNull(),
-  invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(),
-  token: varchar("token", { length: 64 }).notNull().unique(),
-  status: mysqlEnum("status", ["pending", "accepted", "revoked"]).default("pending").notNull(),
-  expiresAt: timestamp("expiresAt").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-var interviewSessions = mysqlTable("interview_sessions", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  recipientName: varchar("recipientName", { length: 100 }),
-  // 誰宛か
-  topic: varchar("topic", { length: 100 }),
-  // 話題（自分史、感謝、謝罪etc）
-  status: mysqlEnum("status", ["active", "completed"]).default("active").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-var interviewMessages = mysqlTable("interview_messages", {
-  id: int("id").autoincrement().primaryKey(),
-  sessionId: int("sessionId").notNull(),
-  sender: mysqlEnum("sender", ["ai", "user"]).notNull(),
-  content: text("content").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-
-// server/db.ts
-init_env();
 
 // server/db_share_token.ts
 import { eq, and } from "drizzle-orm";
@@ -564,9 +462,32 @@ async function migrateShareTokenIfNeeded(db, letterId, legacyToken) {
   if (existingToken) return;
   await createShareToken(db, letterId, legacyToken);
 }
+var init_db_share_token = __esm({
+  "server/db_share_token.ts"() {
+    "use strict";
+    init_schema();
+  }
+});
 
 // server/db_reminder.ts
 import { eq as eq2, and as and2 } from "drizzle-orm";
+async function createRemindersForLetter(db, letterId, ownerUserId, unlockAt, daysBeforeList) {
+  await db.delete(letterReminders).where(eq2(letterReminders.letterId, letterId));
+  for (const daysBefore of daysBeforeList) {
+    const scheduledAt = new Date(unlockAt.getTime() - daysBefore * 24 * 60 * 60 * 1e3);
+    if (scheduledAt <= /* @__PURE__ */ new Date()) {
+      continue;
+    }
+    await db.insert(letterReminders).values({
+      letterId,
+      ownerUserId,
+      type: "before_unlock",
+      daysBefore,
+      scheduledAt,
+      status: "pending"
+    });
+  }
+}
 async function getRemindersByLetterId(db, letterId) {
   return await db.select().from(letterReminders).where(eq2(letterReminders.letterId, letterId)).orderBy(letterReminders.daysBefore);
 }
@@ -591,7 +512,9 @@ async function getPendingReminders(db, limit = 100) {
     const letter = await db.select().from(letters).where(eq2(letters.id, reminder.letterId)).limit(1);
     const user = await db.select({
       email: users.email,
-      notificationEmail: users.notificationEmail
+      notificationEmail: users.notificationEmail,
+      notificationEmailVerified: users.notificationEmailVerified,
+      trustedContactEmail: users.trustedContactEmail
     }).from(users).where(eq2(users.id, reminder.ownerUserId)).limit(1);
     return {
       ...reminder,
@@ -646,9 +569,16 @@ async function updateLetterReminders(db, letterId, ownerUserId, unlockAt, daysBe
 async function deleteRemindersByLetterId(db, letterId) {
   await db.delete(letterReminders).where(eq2(letterReminders.letterId, letterId));
 }
+var init_db_reminder = __esm({
+  "server/db_reminder.ts"() {
+    "use strict";
+    init_schema();
+  }
+});
 
 // server/db.ts
-var _db = null;
+import { eq as eq3, and as and3, desc as desc2 } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -717,19 +647,26 @@ async function getUserByOpenId(openId) {
   const result = await db.select().from(users).where(eq3(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
-async function updateUserNotificationEmail(userId, notificationEmail) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  await db.update(users).set({ notificationEmail }).where(eq3(users.id, userId));
-}
 async function updateUserEmail(userId, newEmail) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
   await db.update(users).set({ email: newEmail }).where(eq3(users.id, userId));
+}
+async function updateUserTrustedContactEmail(userId, trustedContactEmail) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  await db.update(users).set({ trustedContactEmail }).where(eq3(users.id, userId));
+}
+async function updateUserNotificationSettings(userId, notifyEnabled, notifyDaysBefore) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  await db.update(users).set({ notifyEnabled, notifyDaysBefore }).where(eq3(users.id, userId));
 }
 async function createLetter(letter) {
   const db = await getDb();
@@ -746,6 +683,13 @@ async function getLetterById(id) {
   }
   const result = await db.select().from(letters).where(eq3(letters.id, id)).limit(1);
   return result.length > 0 ? result[0] : void 0;
+}
+async function getLettersByAuthor(authorId) {
+  const db = await getDb();
+  if (!db) {
+    return [];
+  }
+  return await db.select().from(letters).where(eq3(letters.authorId, authorId)).orderBy(desc2(letters.createdAt));
 }
 async function updateLetter(id, updates) {
   const db = await getDb();
@@ -1210,6 +1154,11 @@ async function getDraftByUserAndId(userId, draftId) {
   const result = await db.select().from(drafts).where(and3(eq3(drafts.id, draftId), eq3(drafts.userId, userId))).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
+async function createRemindersForLetter2(letterId, ownerUserId, unlockAt, daysBeforeList) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return createRemindersForLetter(db, letterId, ownerUserId, unlockAt, daysBeforeList);
+}
 async function getRemindersByLetterId2(letterId) {
   const db = await getDb();
   if (!db) return [];
@@ -1467,6 +1416,341 @@ async function completeInterviewSession(sessionId) {
   if (!db) return;
   await db.update(interviewSessions).set({ status: "completed" }).where(eq3(interviewSessions.id, sessionId));
 }
+var _db;
+var init_db = __esm({
+  "server/db.ts"() {
+    "use strict";
+    init_schema();
+    init_env();
+    init_db_share_token();
+    init_db_reminder();
+    _db = null;
+  }
+});
+
+// server/_core/url.ts
+var url_exports = {};
+__export(url_exports, {
+  getAppBaseUrl: () => getAppBaseUrl,
+  makeLetterUrl: () => makeLetterUrl,
+  makeUrl: () => makeUrl,
+  makeVerifyEmailUrl: () => makeVerifyEmailUrl
+});
+function getAppBaseUrl() {
+  if (ENV.appBaseUrl && ENV.appBaseUrl !== "https://miraibin.web.app") {
+    return ENV.appBaseUrl.replace(/\/$/, "");
+  }
+  if (ENV.appBaseUrl) {
+    return ENV.appBaseUrl.replace(/\/$/, "");
+  }
+  if (ENV.oAuthServerUrl) {
+    return ENV.oAuthServerUrl.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  }
+  return "http://localhost:5173";
+}
+function makeUrl(path3, params) {
+  const baseUrl = getAppBaseUrl();
+  const normalizedPath = path3.startsWith("/") ? path3 : `/${path3}`;
+  let url = `${baseUrl}${normalizedPath}`;
+  if (params && Object.keys(params).length > 0) {
+    const searchParams = new URLSearchParams(params);
+    url += `?${searchParams.toString()}`;
+  }
+  return url;
+}
+function makeLetterUrl(letterId) {
+  return makeUrl(`/letters/${letterId}`);
+}
+function makeVerifyEmailUrl(token) {
+  return makeUrl("/settings", { verify: token });
+}
+var init_url = __esm({
+  "server/_core/url.ts"() {
+    "use strict";
+    init_env();
+  }
+});
+
+// server/_core/push/sendPush.ts
+var sendPush_exports = {};
+__export(sendPush_exports, {
+  isPushConfigured: () => isPushConfigured,
+  sendOpenedPush: () => sendOpenedPush,
+  sendPushToUser: () => sendPushToUser,
+  sendReminderPush: () => sendReminderPush
+});
+import { eq as eq5 } from "drizzle-orm";
+function isPushConfigured() {
+  return !!(ENV.vapidPublicKey && ENV.vapidPrivateKey);
+}
+async function sendPushToUser(userId, payload) {
+  const result = { sent: 0, failed: 0, revoked: 0 };
+  if (!isPushConfigured()) {
+    console.log("[Push] VAPID not configured, skipping push");
+    return result;
+  }
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Push] Database not available");
+    return result;
+  }
+  const subscriptions = await db.select().from(pushSubscriptions).where(
+    eq5(pushSubscriptions.userId, userId)
+  );
+  const activeSubscriptions = subscriptions.filter((s) => !s.revokedAt);
+  if (activeSubscriptions.length === 0) {
+    console.log(`[Push] No active subscriptions for user ${userId}`);
+    return result;
+  }
+  console.log(`[Push] Sending to ${activeSubscriptions.length} subscriptions for user ${userId}`);
+  const webpush = await import("web-push");
+  webpush.setVapidDetails(
+    ENV.pushSubject,
+    ENV.vapidPublicKey,
+    ENV.vapidPrivateKey
+  );
+  const payloadString = JSON.stringify(payload);
+  for (const subscription of activeSubscriptions) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.p256dh,
+            auth: subscription.auth
+          }
+        },
+        payloadString
+      );
+      result.sent++;
+      console.log(`[Push] Sent to endpoint: ${subscription.endpoint.substring(0, 50)}...`);
+    } catch (error) {
+      const err = error;
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        console.log(`[Push] Subscription expired, revoking: ${subscription.endpoint.substring(0, 50)}...`);
+        await db.update(pushSubscriptions).set({ revokedAt: /* @__PURE__ */ new Date() }).where(eq5(pushSubscriptions.id, subscription.id));
+        result.revoked++;
+      } else {
+        console.warn(`[Push] Failed to send: ${err.message || error}`);
+        result.failed++;
+      }
+    }
+  }
+  console.log(`[Push] Results: sent=${result.sent}, failed=${result.failed}, revoked=${result.revoked}`);
+  return result;
+}
+async function sendReminderPush(userId, recipientLabel, daysBefore, letterId) {
+  const title = daysBefore === 1 ? "\u{1F4EC} \u660E\u65E5\u304C\u958B\u5C01\u65E5\u3067\u3059" : `\u{1F4EC} \u958B\u5C01\u65E5\u307E\u3067\u3042\u3068${daysBefore}\u65E5`;
+  const body = `\u300C${recipientLabel}\u300D\u3078\u306E\u624B\u7D19\u306E\u958B\u5C01\u65E5\u304C\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059`;
+  return sendPushToUser(userId, {
+    title,
+    body,
+    url: `/letters/${letterId}`
+  });
+}
+async function sendOpenedPush(userId, recipientLabel, letterId) {
+  return sendPushToUser(userId, {
+    title: "\u{1F4D6} \u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F",
+    body: `\u300C${recipientLabel}\u300D\u3078\u306E\u624B\u7D19\u304C\u8AAD\u307E\u308C\u307E\u3057\u305F`,
+    url: `/letters/${letterId}`
+  });
+}
+var init_sendPush = __esm({
+  "server/_core/push/sendPush.ts"() {
+    "use strict";
+    init_env();
+    init_db();
+    init_schema();
+  }
+});
+
+// server/_core/jobs/cleanupNotifications.ts
+var cleanupNotifications_exports = {};
+__export(cleanupNotifications_exports, {
+  cleanupNotifications: () => cleanupNotifications
+});
+import { and as and5, lt, isNotNull } from "drizzle-orm";
+async function cleanupNotifications(days = 90) {
+  const executedAt = (/* @__PURE__ */ new Date()).toISOString();
+  console.log(`[CleanupNotifications] Starting cleanup (days=${days})...`);
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[CleanupNotifications] Database not available, skipping cleanup");
+      return { deleted: 0, executedAt, error: "Database not available" };
+    }
+    const thresholdDate = /* @__PURE__ */ new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - days);
+    const result = await db.delete(notifications).where(
+      and5(
+        isNotNull(notifications.readAt),
+        lt(notifications.createdAt, thresholdDate)
+      )
+    );
+    const deleted = result?.affectedRows ?? 0;
+    console.log(`[CleanupNotifications] Completed: ${deleted} notifications deleted`);
+    console.log(`[CleanupNotifications] Threshold: ${thresholdDate.toISOString()}`);
+    return { deleted, executedAt };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("[CleanupNotifications] Failed:", errorMsg);
+    return { deleted: 0, executedAt, error: errorMsg };
+  }
+}
+var init_cleanupNotifications = __esm({
+  "server/_core/jobs/cleanupNotifications.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+  }
+});
+
+// server/_core/vite.ts
+var vite_exports = {};
+__export(vite_exports, {
+  setupVite: () => setupVite
+});
+import fs2 from "fs";
+import { nanoid as nanoid2 } from "nanoid";
+import path2 from "path";
+async function setupVite(app2, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const { createServer: createViteServer } = await import("vite");
+  const vite = await createViteServer({
+    configFile: path2.resolve(import.meta.dirname, "../../vite.config.ts"),
+    server: serverOptions,
+    appType: "custom"
+  });
+  app2.use(vite.middlewares);
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path2.resolve(
+        import.meta.dirname,
+        "../..",
+        "client",
+        "index.html"
+      );
+      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid2()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+var init_vite = __esm({
+  "server/_core/vite.ts"() {
+    "use strict";
+  }
+});
+
+// server/_core/index.ts
+import "dotenv/config";
+import express2 from "express";
+import { createServer } from "http";
+import net from "net";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+
+// shared/const.ts
+var COOKIE_NAME = "app_session_id";
+var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
+var UNAUTHED_ERR_MSG = "Please login (10001)";
+var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
+
+// server/_core/cookies.ts
+function isSecureRequest(req) {
+  if (req.protocol === "https") return true;
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  if (!forwardedProto) return false;
+  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
+  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+}
+function getSessionCookieOptions(req) {
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "none",
+    secure: isSecureRequest(req)
+  };
+}
+
+// server/_core/systemRouter.ts
+init_notification();
+import { z } from "zod";
+
+// server/_core/trpc.ts
+import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
+import superjson from "superjson";
+var t = initTRPC.context().create({
+  transformer: superjson
+});
+var router = t.router;
+var publicProcedure = t.procedure;
+var requireUser = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user
+    }
+  });
+});
+var protectedProcedure = t.procedure.use(requireUser);
+var adminProcedure = t.procedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== "admin") {
+      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user
+      }
+    });
+  })
+);
+
+// server/_core/systemRouter.ts
+var systemRouter = router({
+  health: publicProcedure.input(
+    z.object({
+      timestamp: z.number().min(0, "timestamp cannot be negative")
+    })
+  ).query(() => ({
+    ok: true
+  })),
+  notifyOwner: adminProcedure.input(
+    z.object({
+      title: z.string().min(1, "title is required"),
+      content: z.string().min(1, "content is required")
+    })
+  ).mutation(async ({ input }) => {
+    const delivered = await notifyOwner(input);
+    return {
+      success: delivered
+    };
+  })
+});
+
+// server/routers.ts
+init_db();
+init_schema();
+import { z as z2 } from "zod";
+import { eq as eq6, and as and6 } from "drizzle-orm";
 
 // server/_core/llm.ts
 init_env();
@@ -1839,7 +2123,280 @@ function canProvideServerShare(unlockAt) {
   return now >= unlockAt;
 }
 
+// server/db_notification.ts
+init_schema();
+import { eq as eq4, desc as desc3, and as and4, isNull, sql } from "drizzle-orm";
+async function createNotification(db, userId, type, title, body, meta) {
+  const result = await db.insert(notifications).values({
+    userId,
+    type,
+    title,
+    body,
+    meta: meta ? JSON.stringify(meta) : null
+  });
+  return result[0].insertId;
+}
+async function getNotifications(db, userId, limit = 50, offset = 0) {
+  return await db.select().from(notifications).where(eq4(notifications.userId, userId)).orderBy(desc3(notifications.createdAt)).limit(limit).offset(offset);
+}
+async function getUnreadCount(db, userId) {
+  const result = await db.select({ count: sql`COUNT(*)` }).from(notifications).where(and4(
+    eq4(notifications.userId, userId),
+    isNull(notifications.readAt)
+  ));
+  return result[0]?.count ?? 0;
+}
+async function markNotificationAsRead(db, userId, notificationId) {
+  const now = /* @__PURE__ */ new Date();
+  if (notificationId) {
+    await db.update(notifications).set({ readAt: now }).where(and4(
+      eq4(notifications.id, notificationId),
+      eq4(notifications.userId, userId)
+    ));
+  } else {
+    await db.update(notifications).set({ readAt: now }).where(and4(
+      eq4(notifications.userId, userId),
+      isNull(notifications.readAt)
+    ));
+  }
+}
+async function createReminderNotification(db, userId, letterId, recipientLabel, daysRemaining, unlockAtStr) {
+  const title = `\u624B\u7D19\u306E\u958B\u5C01\u65E5\u304C\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059`;
+  const body = `${recipientLabel}\u3078\u306E\u624B\u7D19\u304C${daysRemaining}\u65E5\u5F8C\uFF08${unlockAtStr}\uFF09\u306B\u958B\u5C01\u53EF\u80FD\u306B\u306A\u308A\u307E\u3059\u3002`;
+  return await createNotification(db, userId, "reminder_before_unlock", title, body, {
+    letterId,
+    recipientLabel,
+    daysRemaining
+  });
+}
+
 // server/routers.ts
+init_db();
+
+// server/_core/email/sendEmail.ts
+init_env();
+var RATE_LIMIT_MS = 24 * 60 * 60 * 1e3;
+async function sendEmail(params) {
+  const provider = ENV.mailProvider;
+  console.log(`[Email] Sending via ${provider} to ${params.to}: ${params.subject}`);
+  if (provider === "mock") {
+    return sendMockEmail(params);
+  } else if (provider === "sendgrid") {
+    return sendSendGridEmail(params);
+  } else {
+    console.warn(`[Email] Unknown provider "${provider}", falling back to mock`);
+    return sendMockEmail(params);
+  }
+}
+async function sendMockEmail(params) {
+  console.log("=".repeat(60));
+  console.log("[Email Mock] Would send email:");
+  console.log(`  To: ${params.to}`);
+  console.log(`  Subject: ${params.subject}`);
+  console.log(`  Category: ${params.category || "none"}`);
+  console.log(`  Text Preview: ${params.text.substring(0, 200)}...`);
+  if (params.meta) {
+    console.log(`  Meta: ${JSON.stringify(params.meta)}`);
+  }
+  console.log("=".repeat(60));
+  return { success: true, messageId: `mock-${Date.now()}` };
+}
+async function sendSendGridEmail(params) {
+  if (!ENV.sendgridApiKey) {
+    console.error("[Email] SENDGRID_API_KEY not configured");
+    return { success: false, error: "SENDGRID_API_KEY not configured" };
+  }
+  if (!ENV.mailFrom) {
+    console.error("[Email] MAIL_FROM not configured");
+    return { success: false, error: "MAIL_FROM not configured" };
+  }
+  try {
+    const sgMail = await import("@sendgrid/mail");
+    sgMail.default.setApiKey(ENV.sendgridApiKey);
+    const msg = {
+      to: params.to,
+      from: ENV.mailFrom,
+      subject: params.subject,
+      text: params.text
+    };
+    if (params.html) {
+      msg.html = params.html;
+    }
+    if (params.category) {
+      msg.categories = [params.category];
+    }
+    const [response] = await sgMail.default.send(msg);
+    console.log(`[Email] SendGrid success: ${response.statusCode}`);
+    return {
+      success: true,
+      messageId: response.headers["x-message-id"] || `sg-${Date.now()}`
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("[Email] SendGrid error:", errorMsg);
+    return { success: false, error: errorMsg };
+  }
+}
+
+// server/_core/email/emailTemplates.ts
+init_url();
+function buildVerificationEmailSubject() {
+  return "\u3010\u672A\u6765\u4FBF\u3011\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D";
+}
+function buildVerificationEmailHtml(params) {
+  const verifyUrl = makeVerifyEmailUrl(params.token);
+  return `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D</title>
+</head>
+<body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; line-height: 1.8; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); border-radius: 12px; padding: 32px; margin-bottom: 24px;">
+    <h1 style="color: #4F46E5; font-size: 24px; margin: 0 0 16px 0;">
+      \u2709\uFE0F \u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D
+    </h1>
+    <p style="font-size: 16px; margin: 0; color: #3730A3;">
+      \u4EE5\u4E0B\u306E\u30DC\u30BF\u30F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u3001\u901A\u77E5\u5148\u30E1\u30FC\u30EB\u306E\u8A2D\u5B9A\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+    </p>
+  </div>
+
+  <div style="text-align: center; margin: 32px 0;">
+    <a href="${verifyUrl}" style="display: inline-block; background: #4F46E5; color: #fff; text-decoration: none; padding: 16px 48px; border-radius: 8px; font-weight: bold; font-size: 16px;">
+      \u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u3092\u78BA\u8A8D\u3059\u308B
+    </a>
+  </div>
+
+  <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 16px 20px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+    <p style="margin: 0; font-size: 14px; color: #78350F;">
+      \u26A0\uFE0F \u3053\u306E\u30EA\u30F3\u30AF\u306F24\u6642\u9593\u3067\u6709\u52B9\u671F\u9650\u304C\u5207\u308C\u307E\u3059\u3002<br>
+      \u304A\u65E9\u3081\u306B\u78BA\u8A8D\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+    </p>
+  </div>
+
+  <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
+    \u30DC\u30BF\u30F3\u304C\u30AF\u30EA\u30C3\u30AF\u3067\u304D\u306A\u3044\u5834\u5408\u306F\u3001\u4EE5\u4E0B\u306EURL\u3092\u30D6\u30E9\u30A6\u30B6\u306B\u8CBC\u308A\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\uFF1A<br>
+    <a href="${verifyUrl}" style="color: #4F46E5; word-break: break-all;">${verifyUrl}</a>
+  </p>
+
+  <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
+
+  <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
+    \u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002<br>
+    \u5FC3\u5F53\u305F\u308A\u304C\u306A\u3044\u5834\u5408\u306F\u3001\u3053\u306E\u30E1\u30FC\u30EB\u3092\u7121\u8996\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+  </p>
+</body>
+</html>
+  `.trim();
+}
+function buildVerificationEmailText(params) {
+  const verifyUrl = makeVerifyEmailUrl(params.token);
+  return `
+\u3010\u672A\u6765\u4FBF\u3011\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D
+
+\u4EE5\u4E0B\u306EURL\u306B\u30A2\u30AF\u30BB\u30B9\u3057\u3066\u3001\u901A\u77E5\u5148\u30E1\u30FC\u30EB\u306E\u8A2D\u5B9A\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+${verifyUrl}
+
+\u203B \u3053\u306E\u30EA\u30F3\u30AF\u306F24\u6642\u9593\u3067\u6709\u52B9\u671F\u9650\u304C\u5207\u308C\u307E\u3059\u3002
+
+---
+\u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+\u5FC3\u5F53\u305F\u308A\u304C\u306A\u3044\u5834\u5408\u306F\u3001\u3053\u306E\u30E1\u30FC\u30EB\u3092\u7121\u8996\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+  `.trim();
+}
+function buildOpenNotificationSubject() {
+  return "\u3010\u672A\u6765\u4FBF\u3011\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F";
+}
+function buildOpenNotificationHtml(params) {
+  const { recipientLabel, openedAt, letterManagementUrl } = params;
+  const openedAtStr = openedAt.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Tokyo"
+  });
+  return `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F</title>
+</head>
+<body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; line-height: 1.8; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border-radius: 12px; padding: 32px; margin-bottom: 24px;">
+    <h1 style="color: #059669; font-size: 24px; margin: 0 0 16px 0;">
+      \u{1F4D6} \u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F
+    </h1>
+    <p style="font-size: 18px; margin: 0; color: #047857;">
+      \u300C${recipientLabel}\u300D\u3078\u306E\u624B\u7D19\u304C\u8AAD\u307E\u308C\u307E\u3057\u305F
+    </p>
+  </div>
+
+  <div style="background: #fff; border: 1px solid #E5E7EB; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+    <h2 style="font-size: 16px; color: #6B7280; margin: 0 0 12px 0;">\u958B\u5C01\u65E5\u6642</h2>
+    <p style="font-size: 20px; font-weight: bold; color: #1F2937; margin: 0;">
+      ${openedAtStr}
+    </p>
+  </div>
+
+  <div style="background: #F0FDF4; border-left: 4px solid #10B981; padding: 16px 20px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+    <p style="margin: 0; font-size: 14px; color: #065F46;">
+      \u{1F510} \u30BC\u30ED\u77E5\u8B58\u8A2D\u8A08\u306E\u305F\u3081\u3001\u904B\u55B6\u8005\u3082\u624B\u7D19\u306E\u5185\u5BB9\u3092\u8AAD\u3080\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093\u3002<br>
+      \u3042\u306A\u305F\u306E\u60F3\u3044\u306F\u5B89\u5168\u306B\u5C4A\u304D\u307E\u3057\u305F\u3002
+    </p>
+  </div>
+
+  <div style="text-align: center; margin-bottom: 24px;">
+    <a href="${letterManagementUrl}" style="display: inline-block; background: #059669; color: #fff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: bold; font-size: 16px;">
+      \u624B\u7D19\u306E\u8A73\u7D30\u3092\u898B\u308B
+    </a>
+  </div>
+
+  <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
+
+  <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
+    \u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+  </p>
+</body>
+</html>
+  `.trim();
+}
+function buildOpenNotificationText(params) {
+  const { recipientLabel, openedAt, letterManagementUrl } = params;
+  const openedAtStr = openedAt.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Tokyo"
+  });
+  return `
+\u3010\u672A\u6765\u4FBF\u3011\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F
+
+\u300C${recipientLabel}\u300D\u3078\u306E\u624B\u7D19\u304C\u8AAD\u307E\u308C\u307E\u3057\u305F\u3002
+
+\u25A0 \u958B\u5C01\u65E5\u6642
+${openedAtStr}
+
+\u25A0 \u624B\u7D19\u306E\u8A73\u7D30\u3092\u898B\u308B
+${letterManagementUrl}
+
+\u203B \u30BC\u30ED\u77E5\u8B58\u8A2D\u8A08\u306E\u305F\u3081\u3001\u904B\u55B6\u8005\u3082\u624B\u7D19\u306E\u5185\u5BB9\u3092\u8AAD\u3080\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093\u3002
+
+---
+\u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+  `.trim();
+}
+
+// server/routers.ts
+init_env();
 var appRouter = router({
   system: systemRouter,
   auth: router({
@@ -1859,11 +2416,69 @@ var appRouter = router({
     /**
      * 通知先メールを更新
      * 未設定（null）ならアカウントメールを使用
+     * 変更時はverified=falseにリセットされ、検証メールを送る
      */
     updateNotificationEmail: protectedProcedure.input(z2.object({
       notificationEmail: z2.string().email().nullable()
     })).mutation(async ({ ctx, input }) => {
-      await updateUserNotificationEmail(ctx.user.id, input.notificationEmail);
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      if (input.notificationEmail) {
+        const verifyToken = nanoid(32);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+        await db.update(users).set({
+          notificationEmail: input.notificationEmail,
+          notificationEmailVerified: false,
+          notificationEmailVerifyToken: verifyToken,
+          notificationEmailVerifyExpiresAt: expiresAt
+        }).where(eq6(users.id, ctx.user.id));
+        try {
+          const subject = buildVerificationEmailSubject();
+          const html = buildVerificationEmailHtml({ token: verifyToken, email: input.notificationEmail });
+          const text2 = buildVerificationEmailText({ token: verifyToken, email: input.notificationEmail });
+          await sendEmail({
+            to: input.notificationEmail,
+            subject,
+            text: text2,
+            html,
+            category: "email_verification",
+            meta: { userId: ctx.user.id }
+          });
+          console.log(`[Email Verification] Sent to ${input.notificationEmail}`);
+        } catch (emailErr) {
+          console.warn(`[Email Verification] Failed to send:`, emailErr);
+        }
+        return { success: true, requiresVerification: true };
+      } else {
+        await db.update(users).set({
+          notificationEmail: null,
+          notificationEmailVerified: false,
+          notificationEmailVerifyToken: null,
+          notificationEmailVerifyExpiresAt: null
+        }).where(eq6(users.id, ctx.user.id));
+        return { success: true, requiresVerification: false };
+      }
+    }),
+    /**
+     * メール検証トークンで確認
+     */
+    verifyNotificationEmail: publicProcedure.input(z2.object({ token: z2.string() })).mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const result = await db.select().from(users).where(eq6(users.notificationEmailVerifyToken, input.token)).limit(1);
+      if (result.length === 0) {
+        return { success: false, error: "invalid_token" };
+      }
+      const user = result[0];
+      const now = /* @__PURE__ */ new Date();
+      if (user.notificationEmailVerifyExpiresAt && user.notificationEmailVerifyExpiresAt < now) {
+        return { success: false, error: "token_expired" };
+      }
+      await db.update(users).set({
+        notificationEmailVerified: true,
+        notificationEmailVerifyToken: null,
+        notificationEmailVerifyExpiresAt: null
+      }).where(eq6(users.id, user.id));
       return { success: true };
     }),
     /**
@@ -1872,8 +2487,43 @@ var appRouter = router({
     getSettings: protectedProcedure.query(async ({ ctx }) => {
       return {
         notificationEmail: ctx.user.notificationEmail || null,
-        accountEmail: ctx.user.email || null
+        notificationEmailVerified: ctx.user.notificationEmailVerified ?? false,
+        trustedContactEmail: ctx.user.trustedContactEmail || null,
+        accountEmail: ctx.user.email || null,
+        notifyEnabled: ctx.user.notifyEnabled ?? true,
+        notifyDaysBefore: ctx.user.notifyDaysBefore ?? 7
       };
+    }),
+    /**
+     * 信頼できる通知先メールを更新
+     * 配偶者などの通知先（リマインド/初回開封通知を送信）
+     */
+    updateTrustedContactEmail: protectedProcedure.input(z2.object({
+      trustedContactEmail: z2.string().email().nullable()
+    })).mutation(async ({ ctx, input }) => {
+      await updateUserTrustedContactEmail(ctx.user.id, input.trustedContactEmail);
+      return { success: true };
+    }),
+    /**
+     * リマインド通知設定を更新
+     */
+    updateNotificationSettings: protectedProcedure.input(z2.object({
+      notifyEnabled: z2.boolean(),
+      notifyDaysBefore: z2.number().int().min(1).max(365)
+    })).mutation(async ({ ctx, input }) => {
+      await updateUserNotificationSettings(ctx.user.id, input.notifyEnabled, input.notifyDaysBefore);
+      const letters2 = await getLettersByAuthor(ctx.user.id);
+      const futureLetters = letters2.filter(
+        (l) => l.unlockAt && new Date(l.unlockAt) > /* @__PURE__ */ new Date() && !l.unlockedAt
+      );
+      for (const letter of futureLetters) {
+        if (!input.notifyEnabled) {
+          await deleteRemindersByLetterId2(letter.id);
+        } else {
+          await updateLetterReminders2(letter.id, ctx.user.id, new Date(letter.unlockAt), [input.notifyDaysBefore]);
+        }
+      }
+      return { success: true };
     }),
     /**
      * アカウントメールを変更
@@ -1884,6 +2534,80 @@ var appRouter = router({
       newEmail: z2.string().email()
     })).mutation(async ({ ctx, input }) => {
       await updateUserEmail(ctx.user.id, input.newEmail);
+      return { success: true };
+    }),
+    // ============================================
+    // Push Notification Subscription Management
+    // ============================================
+    /**
+     * Get VAPID public key for client subscription
+     */
+    getVapidPublicKey: publicProcedure.query(() => {
+      return { publicKey: ENV.vapidPublicKey || null };
+    }),
+    /**
+     * Get push subscription status for current user
+     */
+    getPushStatus: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { subscriptions: [], isConfigured: false };
+      const subs = await db.select({
+        id: pushSubscriptions.id,
+        endpoint: pushSubscriptions.endpoint,
+        createdAt: pushSubscriptions.createdAt,
+        revokedAt: pushSubscriptions.revokedAt
+      }).from(pushSubscriptions).where(eq6(pushSubscriptions.userId, ctx.user.id));
+      return {
+        subscriptions: subs.filter((s) => !s.revokedAt),
+        isConfigured: !!ENV.vapidPublicKey
+      };
+    }),
+    /**
+     * Register push subscription
+     */
+    registerPushSubscription: protectedProcedure.input(z2.object({
+      endpoint: z2.string().url(),
+      p256dh: z2.string(),
+      auth: z2.string(),
+      userAgent: z2.string().optional()
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const existing = await db.select().from(pushSubscriptions).where(eq6(pushSubscriptions.endpoint, input.endpoint)).limit(1);
+      if (existing.length > 0) {
+        await db.update(pushSubscriptions).set({
+          userId: ctx.user.id,
+          p256dh: input.p256dh,
+          auth: input.auth,
+          userAgent: input.userAgent || null,
+          revokedAt: null,
+          updatedAt: /* @__PURE__ */ new Date()
+        }).where(eq6(pushSubscriptions.endpoint, input.endpoint));
+        return { success: true, action: "updated" };
+      }
+      await db.insert(pushSubscriptions).values({
+        userId: ctx.user.id,
+        endpoint: input.endpoint,
+        p256dh: input.p256dh,
+        auth: input.auth,
+        userAgent: input.userAgent || null
+      });
+      return { success: true, action: "created" };
+    }),
+    /**
+     * Unregister push subscription
+     */
+    unregisterPushSubscription: protectedProcedure.input(z2.object({
+      endpoint: z2.string().url()
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      await db.update(pushSubscriptions).set({ revokedAt: /* @__PURE__ */ new Date() }).where(
+        and6(
+          eq6(pushSubscriptions.userId, ctx.user.id),
+          eq6(pushSubscriptions.endpoint, input.endpoint)
+        )
+      );
       return { success: true };
     })
   }),
@@ -1977,11 +2701,17 @@ var appRouter = router({
           });
           console.log(`[OTS] Letter ${letterId} submitted to OpenTimestamps`);
         } else {
-          console.warn(`[OTS] Failed to stamp letter ${letterId}:`, result.error);
+          console.warn(`[OTS] Failed to stamp letter ${letterId}: `, result.error);
         }
       }).catch((error) => {
-        console.error(`[OTS] Error stamping letter ${letterId}:`, error);
+        console.error(`[OTS] Error stamping letter ${letterId}: `, error);
       });
+      if (input.unlockAt && ctx.user.notifyEnabled !== false) {
+        const daysBefore = ctx.user.notifyDaysBefore ?? 7;
+        createRemindersForLetter2(letterId, ctx.user.id, new Date(input.unlockAt), [daysBefore]).catch((err) => {
+          console.warn(`[Reminder] Failed to create reminder for letter ${letterId}:`, err);
+        });
+      }
       return { id: letterId };
     }),
     /**
@@ -2328,13 +3058,68 @@ var appRouter = router({
             title: `\u672A\u6765\u4FBF: \u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F`,
             content: `\u3042\u306A\u305F\u306E\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F\u3002
 
-\u5B9B\u5148: ${letter.recipientName || "\u672A\u8A2D\u5B9A"}
-\u958B\u5C01\u65E5\u6642: ${unlockTimeStr}
+\u5B9B\u5148: ${letter.recipientName || "\u672A\u8A2D\u5B9A"} 
+\u958B\u5C01\u65E5\u6642: ${unlockTimeStr} 
 
 \u203B \u672C\u6587\u306F\u30BC\u30ED\u77E5\u8B58\u8A2D\u8A08\u306E\u305F\u3081\u3001\u904B\u55B6\u8005\u3082\u8AAD\u3081\u307E\u305B\u3093\u3002`
           });
         } catch (err) {
-          console.warn("[markOpened] Failed to notify owner:", err);
+          console.warn("[markOpened] Failed to notify owner (Manus):", err);
+        }
+        try {
+          const db = await getDb();
+          if (db) {
+            const ownerResult = await db.select({
+              email: users.email,
+              notificationEmail: users.notificationEmail,
+              notificationEmailVerified: users.notificationEmailVerified
+            }).from(users).where(eq6(users.id, letter.authorId)).limit(1);
+            const owner = ownerResult[0];
+            if (owner) {
+              const ownerEmail = owner.notificationEmail || owner.email;
+              const isVerified = owner.notificationEmailVerified || !owner.notificationEmail;
+              if (ownerEmail && isVerified) {
+                const recipientLabel = letter.recipientName || "\u5927\u5207\u306A\u4EBA";
+                const letterManagementUrl = `${ENV.appBaseUrl}/letters/${letter.id}`;
+                const subject = buildOpenNotificationSubject();
+                const html = buildOpenNotificationHtml({
+                  recipientLabel,
+                  openedAt: /* @__PURE__ */ new Date(),
+                  letterManagementUrl
+                });
+                const text2 = buildOpenNotificationText({
+                  recipientLabel,
+                  openedAt: /* @__PURE__ */ new Date(),
+                  letterManagementUrl
+                });
+                await sendEmail({
+                  to: ownerEmail,
+                  subject,
+                  text: text2,
+                  html,
+                  category: "letter_opened",
+                  meta: { letterId: letter.id }
+                });
+                console.log(`[markOpened] Open notification email sent to ${ownerEmail}`);
+              }
+            }
+          }
+        } catch (emailErr) {
+          console.warn("[markOpened] Failed to send open notification email:", emailErr);
+        }
+        try {
+          const { sendOpenedPush: sendOpenedPush2 } = await Promise.resolve().then(() => (init_sendPush(), sendPush_exports));
+          const recipientLabel = letter.recipientName || "\u5927\u5207\u306A\u4EBA";
+          const pushResult = await sendOpenedPush2(
+            letter.authorId,
+            recipientLabel,
+            letter.id
+          );
+          if (pushResult.sent > 0) {
+            console.log(`[markOpened] Push sent to ${pushResult.sent} devices`);
+          }
+        } catch (pushErr) {
+          console.warn("[markOpened] Failed to send open notification push:", pushErr);
         }
       }
       return {
@@ -2568,7 +3353,7 @@ var appRouter = router({
       mimeType: z2.string().default("audio/webm")
     })).mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.audioBase64, "base64");
-      const fileKey = `audio/${ctx.user.id}/${nanoid()}.webm`;
+      const fileKey = `audio / ${ctx.user.id}/${nanoid()}.webm`;
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
       return { url, key: fileKey };
     }),
@@ -2825,6 +3610,69 @@ JSON\u4EE5\u5916\u306E\u4F59\u8A08\u306A\u6587\u5B57\u306F\u542B\u3081\u306A\u30
       const invites = await getFamilyInvites(input.familyId);
       return { invites };
     })
+  }),
+  // ============================================
+  // Notification Router (In-App Inbox)
+  // ============================================
+  notification: router({
+    /**
+     * Get user's notifications (newest first)
+     */
+    list: protectedProcedure.input(z2.object({
+      limit: z2.number().min(1).max(100).default(50),
+      offset: z2.number().min(0).default(0)
+    })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { notifications: [] };
+      const items = await getNotifications(db, ctx.user.id, input.limit, input.offset);
+      return { notifications: items };
+    }),
+    /**
+     * Get unread notification count (for badge)
+     */
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { count: 0 };
+      const count = await getUnreadCount(db, ctx.user.id);
+      return { count };
+    }),
+    /**
+     * Mark notification(s) as read
+     */
+    markRead: protectedProcedure.input(z2.object({
+      notificationId: z2.number().optional()
+      // If omitted, mark all as read
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { success: false };
+      await markNotificationAsRead(db, ctx.user.id, input.notificationId);
+      return { success: true };
+    })
+  }),
+  // ============================================
+  // Admin Router (Owner-only operations)
+  // ============================================
+  admin: router({
+    /**
+     * Manual cleanup of old read notifications
+     * Only accessible by app owner (OWNER_OPEN_ID)
+     */
+    cleanupNotifications: protectedProcedure.input(z2.object({
+      days: z2.number().min(1).max(365).default(90)
+    })).mutation(async ({ ctx, input }) => {
+      if (ctx.user.openId !== ENV.ownerOpenId) {
+        return { success: false, error: "unauthorized", deleted: 0 };
+      }
+      try {
+        const { cleanupNotifications: cleanupNotifications2 } = await Promise.resolve().then(() => (init_cleanupNotifications(), cleanupNotifications_exports));
+        const result = await cleanupNotifications2(input.days);
+        return { success: true, ...result };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error("[Admin] Cleanup failed:", errorMsg);
+        return { success: false, error: errorMsg, deleted: 0 };
+      }
+    })
   })
 });
 
@@ -2837,6 +3685,9 @@ var HttpError = class extends Error {
   }
 };
 var ForbiddenError = (msg) => new HttpError(403, msg);
+
+// server/_core/sdk.ts
+init_db();
 
 // server/_core/firebaseAdmin.ts
 import admin2 from "firebase-admin";
@@ -2950,8 +3801,11 @@ function serveStatic(app2) {
   });
 }
 
+// server/reminderBatch.ts
+init_db();
+init_db();
+
 // server/reminderMailer.ts
-init_env();
 function buildReminderSubject(daysBefore) {
   if (daysBefore === 1) {
     return "\u3010\u672A\u6765\u4FBF\u3011\u660E\u65E5\u304C\u958B\u5C01\u65E5\u3067\u3059";
@@ -3058,39 +3912,27 @@ ${letterManagementUrl}
 async function sendReminderEmail(params) {
   const { to } = params;
   const subject = buildReminderSubject(params.daysBefore);
-  const htmlBody = buildReminderBodyHtml(params);
-  const textBody = buildReminderBodyText(params);
-  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-    console.warn("[ReminderMailer] Notification service not configured");
-    return false;
-  }
-  const endpoint = new URL(
-    "webdevtoken.v1.WebDevService/SendNotification",
-    ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`
-  ).toString();
+  const html = buildReminderBodyHtml(params);
+  const text2 = buildReminderBodyText(params);
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "content-type": "application/json",
-        "connect-protocol-version": "1"
-      },
-      body: JSON.stringify({
-        title: subject,
-        content: textBody
-      })
+    const result = await sendEmail({
+      to,
+      subject,
+      text: text2,
+      html,
+      category: "reminder",
+      meta: {
+        letterId: params.letterId,
+        daysBefore: params.daysBefore
+      }
     });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.warn(
-        `[ReminderMailer] Failed to send reminder (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
-      );
+    if (result.success) {
+      console.log(`[ReminderMailer] Reminder sent to ${to}: ${subject}`);
+      return true;
+    } else {
+      console.warn(`[ReminderMailer] Failed to send reminder: ${result.error}`);
       return false;
     }
-    console.log(`[ReminderMailer] Reminder sent to ${to}: ${subject}`);
-    return true;
   } catch (error) {
     console.warn("[ReminderMailer] Error sending reminder:", error);
     return false;
@@ -3098,11 +3940,13 @@ async function sendReminderEmail(params) {
 }
 
 // server/reminderBatch.ts
-init_env();
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 async function runReminderBatch() {
   const result = {
     processed: 0,
     sent: 0,
+    inboxCreated: 0,
     failed: 0,
     skipped: 0,
     errors: []
@@ -3126,8 +3970,9 @@ async function runReminderBatch() {
       result.errors.push({ reminderId: reminder.id, error: "User not found" });
       continue;
     }
-    const email = reminder.user.notificationEmail || reminder.user.email;
-    if (!email) {
+    const ownerEmail = reminder.user.notificationEmail || reminder.user.email;
+    const trustedEmail = reminder.user.trustedContactEmail;
+    if (!ownerEmail && !trustedEmail) {
       console.warn(`[ReminderBatch] No email for reminder ${reminder.id}`);
       await markReminderAsFailed2(reminder.id, "No email address");
       result.failed++;
@@ -3141,21 +3986,69 @@ async function runReminderBatch() {
       result.errors.push({ reminderId: reminder.id, error: "No unlock date" });
       continue;
     }
-    const baseUrl = ENV.oAuthServerUrl?.replace("/api", "") || "https://mirai-bin.manus.space";
+    try {
+      const db = await getDb();
+      if (db) {
+        const unlockAtStr = format(new Date(reminder.letter.unlockAt), "yyyy\u5E74MM\u6708dd\u65E5 HH:mm", { locale: ja });
+        const recipientLabel = reminder.letter.recipientName || "\uFF08\u5B9B\u540D\u672A\u8A2D\u5B9A\uFF09";
+        await createReminderNotification(
+          db,
+          reminder.ownerUserId,
+          reminder.letterId,
+          recipientLabel,
+          reminder.daysBefore,
+          unlockAtStr
+        );
+        result.inboxCreated++;
+        console.log(`[ReminderBatch] Created inbox notification for reminder ${reminder.id}`);
+      }
+    } catch (inboxError) {
+      console.warn(`[ReminderBatch] Failed to create inbox notification for ${reminder.id}:`, inboxError);
+    }
+    const { getAppBaseUrl: getAppBaseUrl2 } = await Promise.resolve().then(() => (init_url(), url_exports));
+    const baseUrl = getAppBaseUrl2();
     const letterManagementUrl = `${baseUrl}/letters/${reminder.letterId}`;
-    const emailParams = {
-      to: email,
+    const baseEmailParams = {
       recipientName: reminder.letter.recipientName,
       unlockAt: reminder.letter.unlockAt,
       daysBefore: reminder.daysBefore,
       letterId: reminder.letterId,
       letterManagementUrl
     };
-    const sent = await sendReminderEmail(emailParams);
-    if (sent) {
+    let ownerSent = false;
+    const isOwnerEmailVerified = reminder.user.notificationEmailVerified;
+    if (ownerEmail && isOwnerEmailVerified) {
+      ownerSent = await sendReminderEmail({ ...baseEmailParams, to: ownerEmail });
+      if (ownerSent) {
+        console.log(`[ReminderBatch] Sent reminder ${reminder.id} to owner: ${ownerEmail}`);
+      }
+    } else if (ownerEmail && !isOwnerEmailVerified) {
+      console.log(`[ReminderBatch] Skipping email to ${ownerEmail} for reminder ${reminder.id}: not verified`);
+    }
+    let trustedSent = false;
+    if (trustedEmail) {
+      trustedSent = await sendReminderEmail({ ...baseEmailParams, to: trustedEmail });
+      if (trustedSent) {
+        console.log(`[ReminderBatch] Sent reminder ${reminder.id} to trusted contact: ${trustedEmail}`);
+      }
+    }
+    try {
+      const { sendReminderPush: sendReminderPush2 } = await Promise.resolve().then(() => (init_sendPush(), sendPush_exports));
+      const pushResult = await sendReminderPush2(
+        reminder.ownerUserId,
+        reminder.letter.recipientName || "\u5927\u5207\u306A\u4EBA",
+        reminder.daysBefore,
+        reminder.letterId
+      );
+      if (pushResult.sent > 0) {
+        console.log(`[ReminderBatch] Push sent to ${pushResult.sent} devices for reminder ${reminder.id}`);
+      }
+    } catch (pushErr) {
+      console.warn(`[ReminderBatch] Push failed for reminder ${reminder.id}:`, pushErr);
+    }
+    if (ownerSent || trustedSent) {
       const marked = await markReminderAsSent2(reminder.id);
       if (marked) {
-        console.log(`[ReminderBatch] Sent reminder ${reminder.id} to ${email}`);
         result.sent++;
       } else {
         console.log(`[ReminderBatch] Reminder ${reminder.id} already sent (skipped)`);
