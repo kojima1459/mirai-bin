@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "miraibin"
-  }
+  },
+  "targets": {
+    "miraibin": {
+      "hosting": {
+        "app": [
+          "silent-memo"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
