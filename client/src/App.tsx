@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Route, Switch, Redirect, useLocation } from "wouter";
@@ -61,6 +61,47 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function Router() {
   const [location] = useLocation();
+
+  useEffect(() => {
+    const baseTitle = "SilentMemo";
+    const titles: Record<string, string> = {
+      "/": "ホーム",
+      "/login": "ログイン",
+      "/create": "手紙を書く",
+      "/my-letters": "送信した手紙",
+      "/drafts": "下書き",
+      "/settings": "設定",
+      "/privacy": "プライバシーポリシー",
+      "/terms": "利用規約",
+      "/contact": "お問い合わせ",
+      "/faq": "よくある質問",
+      "/lp": "親から子へ、未来に届ける手紙",
+      "/interview": "インタビュー",
+      "/family": "家族グループ",
+      "/notifications": "通知",
+      "/account-recovery": "アカウント復旧",
+    };
+
+    // Check for exact match
+    if (titles[location]) {
+      document.title = `${titles[location]} | ${baseTitle}`;
+      return;
+    }
+
+    // Check for special valid prefixes (optional, but good for SEO fallbacks)
+    if (location.startsWith("/share/")) {
+      // Handled by ShareLetter component dynamically
+      return;
+    }
+
+    // Default fallback (only if not handled elsewhere)
+    if (location !== "/lp") {
+      // Only set if we haven't matched (and it's not a dynamic route handling it itself)
+      // Actually, for unknown routes or dynamic ones handled by components, 
+      // we might want to leave it or set a default. 
+      // Since ShareLetter handles it, we skip.
+    }
+  }, [location]);
 
   return (
     <Suspense fallback={<PageLoader />}>
