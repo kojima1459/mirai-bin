@@ -36,4 +36,27 @@ export const cleanupNotificationsScheduled = onSchedule({
         // Don't throw - scheduled job should not fail
     }
 });
+/**
+ * Scheduled job: Clean up old drafts
+ * Runs daily at 4:00 AM JST (19:00 UTC previous day)
+ */
+export const cleanupDraftsScheduled = onSchedule({
+    schedule: "0 19 * * *", // 19:00 UTC = 4:00 AM JST
+    timeZone: "UTC",
+    region: "us-central1",
+    memory: "512MiB",
+    timeoutSeconds: 120,
+}, async () => {
+    console.log("[ScheduledJob] Starting draft cleanup...");
+    try {
+        // @ts-ignore - Module is bundled by esbuild
+        const { cleanupDrafts } = await import("./server/_core/jobs/cleanupDrafts.js");
+        const result = await cleanupDrafts(30); // 30日以上未使用の下書きを削除
+        console.log("[ScheduledJob] Draft cleanup completed:", result);
+    }
+    catch (error) {
+        console.error("[ScheduledJob] Draft cleanup failed:", error);
+        // Don't throw - scheduled job should not fail
+    }
+});
 //# sourceMappingURL=index.js.map

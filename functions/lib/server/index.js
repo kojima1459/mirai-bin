@@ -25,13 +25,13 @@ var init_env = __esm({
       geminiApiKey: process.env.GEMINI_API_KEY ?? "AIzaSyBhm0YrR2ju8PMHKkU2F5_oSaSCoPPo8Qo",
       // Email configuration
       sendgridApiKey: process.env.SENDGRID_API_KEY ?? "",
-      mailFrom: process.env.MAIL_FROM ?? "noreply@miraibin.web.app",
+      mailFrom: process.env.MAIL_FROM ?? "noreply@silent-memo.web.app",
       mailProvider: process.env.MAIL_PROVIDER ?? "mock",
-      appBaseUrl: process.env.APP_BASE_URL ?? "https://miraibin.web.app",
+      appBaseUrl: process.env.APP_BASE_URL ?? "https://silent-memo.web.app",
       // Push notification (VAPID)
       vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
       vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
-      pushSubject: process.env.PUSH_SUBJECT ?? "mailto:noreply@miraibin.web.app"
+      pushSubject: process.env.PUSH_SUBJECT ?? "mailto:noreply@silent-memo.web.app"
     };
     if (ENV.isProduction) {
       const missingEnvs = [];
@@ -212,6 +212,8 @@ var init_schema = __esm({
       unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
       isUnlocked: boolean("isUnlocked").default(false).notNull(),
       unlockedAt: timestamp("unlockedAt"),
+      openedUserAgent: text("openedUserAgent"),
+      // 開封時のUser-Agent（端末情報）
       // 共有リンク関連
       shareToken: varchar("shareToken", { length: 64 }).unique(),
       viewCount: int("viewCount").default(0).notNull(),
@@ -576,6 +578,66 @@ var init_db_reminder = __esm({
   }
 });
 
+// server/storage.ts
+var storage_exports = {};
+__export(storage_exports, {
+  storageDelete: () => storageDelete,
+  storageGet: () => storageGet,
+  storagePut: () => storagePut
+});
+import admin from "firebase-admin";
+async function storagePut(relKey, data, contentType = "application/octet-stream") {
+  const key = relKey.replace(/^\/+/, "");
+  const file = bucket.file(key);
+  const buffer = typeof data === "string" ? Buffer.from(data, "utf-8") : Buffer.from(data);
+  await file.save(buffer, {
+    metadata: {
+      contentType
+    },
+    resumable: false
+    // Simpler for smaller files
+  });
+  await file.makePublic();
+  const url = `https://storage.googleapis.com/${bucket.name}/${key}`;
+  return { key, url };
+}
+async function storageGet(relKey) {
+  const key = relKey.replace(/^\/+/, "");
+  const file = bucket.file(key);
+  const [url] = await file.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 60 * 60 * 1e3
+    // 1 hour
+  });
+  return { key, url };
+}
+async function storageDelete(relKey) {
+  const key = relKey.replace(/^\/+/, "");
+  const file = bucket.file(key);
+  try {
+    await file.delete();
+  } catch (error) {
+    if (error.code !== 404) {
+      throw error;
+    }
+  }
+}
+var firebaseApp, bucket;
+var init_storage = __esm({
+  "server/storage.ts"() {
+    "use strict";
+    try {
+      firebaseApp = admin.app();
+    } catch {
+      firebaseApp = admin.initializeApp({
+        projectId: "miraibin",
+        storageBucket: "miraibin.firebasestorage.app"
+      });
+    }
+    bucket = admin.storage(firebaseApp).bucket("miraibin.firebasestorage.app");
+  }
+});
+
 // server/db.ts
 import { eq as eq3, and as and3, desc as desc2 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
@@ -703,6 +765,28 @@ async function deleteLetter(id) {
   if (!db) {
     throw new Error("Database not available");
   }
+  const letterResult = await db.select().from(letters).where(eq3(letters.id, id)).limit(1);
+  const letter = letterResult[0];
+  if (letter) {
+    const { storageDelete: storageDelete2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
+    const parseStorageKey = (url) => {
+      if (!url) return null;
+      const match = url.match(/miraibin\.firebasestorage\.app\/(.+)$/);
+      return match ? match[1] : null;
+    };
+    const audioKey = parseStorageKey(letter.audioUrl);
+    if (audioKey) {
+      await storageDelete2(audioKey).catch((e) => console.warn("Failed to delete audio:", e));
+    }
+    const textKey = parseStorageKey(letter.ciphertextUrl);
+    if (textKey) {
+      await storageDelete2(textKey).catch((e) => console.warn("Failed to delete ciphertext:", e));
+    }
+    const encAudioKey = parseStorageKey(letter.encryptedAudioUrl);
+    if (encAudioKey) {
+      await storageDelete2(encAudioKey).catch((e) => console.warn("Failed to delete enc audio:", e));
+    }
+  }
   await db.delete(letters).where(eq3(letters.id, id));
 }
 async function getLetterByShareToken(shareToken) {
@@ -733,14 +817,15 @@ async function incrementViewCount(id) {
     }).where(eq3(letters.id, id));
   }
 }
-async function unlockLetter(id) {
+async function unlockLetter(id, userAgent) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
   const result = await db.update(letters).set({
     isUnlocked: true,
-    unlockedAt: /* @__PURE__ */ new Date()
+    unlockedAt: /* @__PURE__ */ new Date(),
+    openedUserAgent: userAgent || null
   }).where(and3(eq3(letters.id, id), eq3(letters.isUnlocked, false)));
   return result[0]?.affectedRows > 0;
 }
@@ -1105,6 +1190,94 @@ async function seedTemplates() {
       recordingPrompt: "\u5B50\u3069\u3082\u306B\u4F1D\u3048\u305F\u3044\u60F3\u3044\u3092\u300190\u79D2\u3067\u81EA\u7531\u306B\u8A71\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u611B\u60C5\u3001\u611F\u8B1D\u3001\u4EBA\u751F\u306E\u6559\u8A13\u306A\u3069\u3002",
       exampleOneLiner: "\u3042\u306A\u305F\u306E\u3053\u3068\u3092\u3001\u305A\u3063\u3068\u611B\u3057\u3066\u3044\u308B\u3088\u3002",
       icon: "mail"
+    },
+    // === 配偶者・パートナー向け ===
+    {
+      name: "wedding-anniversary",
+      displayName: "\u7D50\u5A5A\u8A18\u5FF5\u65E5\u306B",
+      description: "\u30D1\u30FC\u30C8\u30CA\u30FC\u3078\u306E\u611F\u8B1D\u3068\u611B\u3092\u4F1D\u3048\u308B\u65E5\u306B",
+      category: "special",
+      prompt: `\u3042\u306A\u305F\u306F\u914D\u5076\u8005\u306B\u5B9B\u3066\u305F\u624B\u7D19\u3092\u66F8\u304F\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\u3067\u3059\u3002
+\u4EE5\u4E0B\u306E\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3092\u3082\u3068\u306B\u3001\u7D50\u5A5A\u8A18\u5FF5\u65E5\u306B\u5C4A\u3051\u308B\u624B\u7D19\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u3010\u30EB\u30FC\u30EB\u3011
+- \u7D50\u5A5A\u3057\u3066\u304B\u3089\u306E\u65E5\u3005\u3078\u306E\u611F\u8B1D
+- \u4E00\u7DD2\u306B\u904E\u3054\u3057\u305F\u601D\u3044\u51FA
+- \u3053\u308C\u304B\u3089\u3082\u5171\u306B\u6B69\u3093\u3067\u3044\u304D\u305F\u3044\u3068\u3044\u3046\u6C17\u6301\u3061
+- \u666E\u6BB5\u306F\u8A00\u3048\u306A\u3044\u611B\u60C5\u306E\u8A00\u8449
+- 300\u301C500\u6587\u5B57\u7A0B\u5EA6
+
+\u3010\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3011
+{{transcription}}`,
+      recordingPrompt: "\u30D1\u30FC\u30C8\u30CA\u30FC\u306B\u4F1D\u3048\u305F\u3044\u3053\u3068\u3092\u300190\u79D2\u3067\u8A71\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u611F\u8B1D\u306E\u8A00\u8449\u3001\u601D\u3044\u51FA\u3001\u3053\u308C\u304B\u3089\u306E\u3053\u3068\u306A\u3069\u3002",
+      exampleOneLiner: "\u3042\u306A\u305F\u3068\u51FA\u4F1A\u3048\u3066\u3001\u672C\u5F53\u306B\u3088\u304B\u3063\u305F\u3002",
+      icon: "heart"
+    },
+    // === 特別な誕生日 ===
+    {
+      name: "milestone-birthday",
+      displayName: "\u7279\u5225\u306A\u8A95\u751F\u65E5\u306B",
+      description: "\u7BC0\u76EE\u306E\u5E74\u9F62\u3092\u8FCE\u3048\u308B\u8A95\u751F\u65E5\u306B\uFF0820\u6B73\u300130\u6B73\u3001\u9084\u66A6\u306A\u3069\uFF09",
+      category: "milestone",
+      prompt: `\u3042\u306A\u305F\u306F\u89AA\u304C\u5B50\u3069\u3082\u306B\u5B9B\u3066\u305F\u624B\u7D19\u3092\u66F8\u304F\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\u3067\u3059\u3002
+\u4EE5\u4E0B\u306E\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3092\u3082\u3068\u306B\u3001\u7BC0\u76EE\u306E\u8A95\u751F\u65E5\u3092\u8FCE\u3048\u308B\u5B50\u3069\u3082\u3078\u306E\u624B\u7D19\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u3010\u30EB\u30FC\u30EB\u3011
+- \u7279\u5225\u306A\u5E74\u9F62\u3092\u8FCE\u3048\u308B\u3053\u3068\u3078\u306E\u795D\u798F
+- \u3053\u308C\u307E\u3067\u306E\u4EBA\u751F\u3092\u632F\u308A\u8FD4\u3063\u3066
+- \u65B0\u3057\u304410\u5E74\u3078\u306E\u671F\u5F85\u3068\u5FDC\u63F4
+- \u89AA\u3068\u3057\u3066\u306E\u8A87\u308A\u3068\u611B\u60C5
+- 300\u301C500\u6587\u5B57\u7A0B\u5EA6
+
+\u3010\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3011
+{{transcription}}`,
+      recordingPrompt: "\u7BC0\u76EE\u306E\u8A95\u751F\u65E5\u3092\u8FCE\u3048\u308B\u5B50\u3069\u3082\u306B\u4F1D\u3048\u305F\u3044\u3053\u3068\u3092\u300190\u79D2\u3067\u8A71\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u795D\u798F\u3001\u601D\u3044\u51FA\u3001\u3053\u308C\u304B\u3089\u3078\u306E\u9858\u3044\u306A\u3069\u3002",
+      exampleOneLiner: "\u65B0\u3057\u3044\u4E00\u6B69\u3092\u8E0F\u307F\u51FA\u3059\u3042\u306A\u305F\u3092\u3001\u5FC3\u304B\u3089\u5FDC\u63F4\u3057\u3066\u308B\u3088\u3002",
+      icon: "cake"
+    },
+    // === 感謝の手紙 ===
+    {
+      name: "thank-you-letter",
+      displayName: "\u3042\u308A\u304C\u3068\u3046\u306E\u624B\u7D19",
+      description: "\u65E5\u9803\u306E\u611F\u8B1D\u3092\u4F1D\u3048\u308B\u624B\u7D19",
+      category: "special",
+      prompt: `\u3042\u306A\u305F\u306F\u611F\u8B1D\u306E\u624B\u7D19\u3092\u66F8\u304F\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\u3067\u3059\u3002
+\u4EE5\u4E0B\u306E\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3092\u3082\u3068\u306B\u3001\u611F\u8B1D\u306E\u6C17\u6301\u3061\u3092\u8FBC\u3081\u305F\u624B\u7D19\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u3010\u30EB\u30FC\u30EB\u3011
+- \u5177\u4F53\u7684\u306A\u30A8\u30D4\u30BD\u30FC\u30C9\u3092\u4EA4\u3048\u3066\u611F\u8B1D\u3092\u4F1D\u3048\u308B
+- \u76F8\u624B\u304C\u3057\u3066\u304F\u308C\u305F\u3053\u3068\u3078\u306E\u611F\u8B1D
+- \u76F8\u624B\u306E\u5B58\u5728\u306E\u5927\u5207\u3055
+- \u3053\u308C\u304B\u3089\u3082\u5927\u5207\u306B\u3057\u305F\u3044\u3068\u3044\u3046\u6C17\u6301\u3061
+- 300\u301C500\u6587\u5B57\u7A0B\u5EA6
+
+\u3010\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3011
+{{transcription}}`,
+      recordingPrompt: "\u611F\u8B1D\u306E\u6C17\u6301\u3061\u3092\u300190\u79D2\u3067\u8A71\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u3069\u3093\u306A\u3053\u3068\u306B\u611F\u8B1D\u3057\u3066\u3044\u308B\u304B\u3001\u76F8\u624B\u3078\u306E\u601D\u3044\u306A\u3069\u3002",
+      exampleOneLiner: "\u3044\u3064\u3082\u3042\u308A\u304C\u3068\u3046\u3002\u3042\u306A\u305F\u306E\u304A\u304B\u3052\u3067\u9811\u5F35\u308C\u3066\u308B\u3002",
+      icon: "heart"
+    },
+    // === 旅立ち・別れ ===
+    {
+      name: "farewell-letter",
+      displayName: "\u65C5\u7ACB\u3061\u306E\u65E5\u306B",
+      description: "\u7559\u5B66\u3001\u8EE2\u52E4\u3001\u5F15\u3063\u8D8A\u3057\u306A\u3069\u65C5\u7ACB\u3061\u306E\u65E5\u306B",
+      category: "milestone",
+      prompt: `\u3042\u306A\u305F\u306F\u5225\u308C\u3068\u5FDC\u63F4\u306E\u624B\u7D19\u3092\u66F8\u304F\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\u3067\u3059\u3002
+\u4EE5\u4E0B\u306E\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3092\u3082\u3068\u306B\u3001\u65C5\u7ACB\u3064\u4EBA\u3078\u306E\u624B\u7D19\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u3010\u30EB\u30FC\u30EB\u3011
+- \u65B0\u3057\u3044\u5834\u6240\u3067\u306E\u6311\u6226\u3078\u306E\u5FDC\u63F4
+- \u3053\u308C\u307E\u3067\u306E\u601D\u3044\u51FA\u3078\u306E\u611F\u8B1D
+- \u96E2\u308C\u3066\u3044\u3066\u3082\u7E4B\u304C\u3063\u3066\u3044\u308B\u3068\u3044\u3046\u30E1\u30C3\u30BB\u30FC\u30B8
+- \u8F9B\u3044\u3068\u304D\u306F\u5E30\u3063\u3066\u304D\u3066\u3044\u3044\u3068\u3044\u3046\u5B89\u5FC3\u611F
+- 300\u301C500\u6587\u5B57\u7A0B\u5EA6
+
+\u3010\u97F3\u58F0\u6587\u5B57\u8D77\u3053\u3057\u3011
+{{transcription}}`,
+      recordingPrompt: "\u65C5\u7ACB\u3064\u4EBA\u306B\u4F1D\u3048\u305F\u3044\u3053\u3068\u3092\u300190\u79D2\u3067\u8A71\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u5FDC\u63F4\u306E\u8A00\u8449\u3001\u601D\u3044\u51FA\u3001\u4ECA\u5F8C\u3078\u306E\u9858\u3044\u306A\u3069\u3002",
+      exampleOneLiner: "\u65B0\u3057\u3044\u5834\u6240\u3067\u3082\u3001\u3042\u306A\u305F\u3089\u3057\u304F\u8F1D\u3044\u3066\u3002",
+      icon: "plane"
     }
   ];
   const templatesToAdd = defaultTemplates.filter((t2) => !existingNames.has(t2.name));
@@ -1437,7 +1610,7 @@ __export(url_exports, {
   makeVerifyEmailUrl: () => makeVerifyEmailUrl
 });
 function getAppBaseUrl() {
-  if (ENV.appBaseUrl && ENV.appBaseUrl !== "https://miraibin.web.app") {
+  if (ENV.appBaseUrl && ENV.appBaseUrl !== "https://silent-memo.web.app") {
     return ENV.appBaseUrl.replace(/\/$/, "");
   }
   if (ENV.appBaseUrl) {
@@ -1995,38 +2168,12 @@ function getLanguageName(langCode) {
   return langMap[langCode] || langCode;
 }
 
-// server/storage.ts
-import admin from "firebase-admin";
-var firebaseApp;
-try {
-  firebaseApp = admin.app();
-} catch {
-  firebaseApp = admin.initializeApp({
-    projectId: "miraibin",
-    storageBucket: "miraibin.firebasestorage.app"
-  });
-}
-var bucket = admin.storage(firebaseApp).bucket("miraibin.firebasestorage.app");
-async function storagePut(relKey, data, contentType = "application/octet-stream") {
-  const key = relKey.replace(/^\/+/, "");
-  const file = bucket.file(key);
-  const buffer = typeof data === "string" ? Buffer.from(data, "utf-8") : Buffer.from(data);
-  await file.save(buffer, {
-    metadata: {
-      contentType
-    },
-    resumable: false
-    // Simpler for smaller files
-  });
-  await file.makePublic();
-  const url = `https://storage.googleapis.com/${bucket.name}/${key}`;
-  return { key, url };
-}
-
 // server/routers.ts
+init_storage();
 import { nanoid } from "nanoid";
 
 // server/opentimestamps.ts
+init_storage();
 var OTS_CALENDAR_URLS = [
   "https://a.pool.opentimestamps.org",
   "https://b.pool.opentimestamps.org",
@@ -2241,7 +2388,7 @@ async function sendSendGridEmail(params) {
 // server/_core/email/emailTemplates.ts
 init_url();
 function buildVerificationEmailSubject() {
-  return "\u3010\u672A\u6765\u4FBF\u3011\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D";
+  return "\u3010SilentMemo\u3011\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D";
 }
 function buildVerificationEmailHtml(params) {
   const verifyUrl = makeVerifyEmailUrl(params.token);
@@ -2284,7 +2431,7 @@ function buildVerificationEmailHtml(params) {
   <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
 
   <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
-    \u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002<br>
+    \u3053\u306E\u30E1\u30FC\u30EB\u306FSilentMemo\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002<br>
     \u5FC3\u5F53\u305F\u308A\u304C\u306A\u3044\u5834\u5408\u306F\u3001\u3053\u306E\u30E1\u30FC\u30EB\u3092\u7121\u8996\u3057\u3066\u304F\u3060\u3055\u3044\u3002
   </p>
 </body>
@@ -2294,7 +2441,7 @@ function buildVerificationEmailHtml(params) {
 function buildVerificationEmailText(params) {
   const verifyUrl = makeVerifyEmailUrl(params.token);
   return `
-\u3010\u672A\u6765\u4FBF\u3011\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D
+\u3010SilentMemo\u3011\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u306E\u78BA\u8A8D
 
 \u4EE5\u4E0B\u306EURL\u306B\u30A2\u30AF\u30BB\u30B9\u3057\u3066\u3001\u901A\u77E5\u5148\u30E1\u30FC\u30EB\u306E\u8A2D\u5B9A\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 
@@ -2303,12 +2450,12 @@ ${verifyUrl}
 \u203B \u3053\u306E\u30EA\u30F3\u30AF\u306F24\u6642\u9593\u3067\u6709\u52B9\u671F\u9650\u304C\u5207\u308C\u307E\u3059\u3002
 
 ---
-\u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+\u3053\u306E\u30E1\u30FC\u30EB\u306FSilentMemo\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
 \u5FC3\u5F53\u305F\u308A\u304C\u306A\u3044\u5834\u5408\u306F\u3001\u3053\u306E\u30E1\u30FC\u30EB\u3092\u7121\u8996\u3057\u3066\u304F\u3060\u3055\u3044\u3002
   `.trim();
 }
 function buildOpenNotificationSubject() {
-  return "\u3010\u672A\u6765\u4FBF\u3011\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F";
+  return "\u3010SilentMemo\u3011\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F";
 }
 function buildOpenNotificationHtml(params) {
   const { recipientLabel, openedAt, letterManagementUrl } = params;
@@ -2361,7 +2508,7 @@ function buildOpenNotificationHtml(params) {
   <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
 
   <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
-    \u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+    \u3053\u306E\u30E1\u30FC\u30EB\u306FSilentMemo\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
   </p>
 </body>
 </html>
@@ -2378,7 +2525,7 @@ function buildOpenNotificationText(params) {
     timeZone: "Asia/Tokyo"
   });
   return `
-\u3010\u672A\u6765\u4FBF\u3011\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F
+\u3010SilentMemo\u3011\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F
 
 \u300C${recipientLabel}\u300D\u3078\u306E\u624B\u7D19\u304C\u8AAD\u307E\u308C\u307E\u3057\u305F\u3002
 
@@ -2391,7 +2538,7 @@ ${letterManagementUrl}
 \u203B \u30BC\u30ED\u77E5\u8B58\u8A2D\u8A08\u306E\u305F\u3081\u3001\u904B\u55B6\u8005\u3082\u624B\u7D19\u306E\u5185\u5BB9\u3092\u8AAD\u3080\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093\u3002
 
 ---
-\u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+\u3053\u306E\u30E1\u30FC\u30EB\u306FSilentMemo\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
   `.trim();
 }
 
@@ -2524,6 +2671,48 @@ var appRouter = router({
         }
       }
       return { success: true };
+    }),
+    /**
+     * アカウント完全削除
+     * すべてのデータを削除: 手紙、下書き、リマインダー、プッシュ購読
+     */
+    deleteAccount: protectedProcedure.input(z2.object({
+      confirmEmail: z2.string().email()
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      if (input.confirmEmail !== ctx.user.email) {
+        throw new Error("\u78BA\u8A8D\u7528\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093");
+      }
+      const userId = ctx.user.id;
+      try {
+        const { storageDelete: storageDelete2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
+        const letters2 = await getLettersByAuthor(userId);
+        for (const letter of letters2) {
+          const parseKey = (url) => url?.match(/miraibin\.firebasestorage\.app\/(.+)$/)?.[1];
+          const keys = [parseKey(letter.audioUrl), parseKey(letter.ciphertextUrl), parseKey(letter.encryptedAudioUrl)].filter(Boolean);
+          for (const key of keys) await storageDelete2(key).catch(() => {
+          });
+          await deleteRemindersByLetterId2(letter.id);
+          await deleteLetter(letter.id);
+        }
+        const drafts2 = await getDraftsByUser(userId);
+        for (const draft of drafts2) {
+          if (draft.audioUrl) {
+            const key = draft.audioUrl.match(/miraibin\.firebasestorage\.app\/(.+)$/)?.[1];
+            if (key) await storageDelete2(key).catch(() => {
+            });
+          }
+          await deleteDraft(draft.id);
+        }
+        await db.delete(pushSubscriptions).where(eq6(pushSubscriptions.userId, userId));
+        await db.delete(users).where(eq6(users.id, userId));
+        console.log(`[Account Deletion] User ${userId} deleted`);
+        return { success: true };
+      } catch (error) {
+        console.error(`[Account Deletion] Failed:`, error);
+        throw new Error("\u30A2\u30AB\u30A6\u30F3\u30C8\u524A\u9664\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
+      }
     }),
     /**
      * アカウントメールを変更
@@ -2932,7 +3121,7 @@ var appRouter = router({
       if (isBot) {
         return {
           isBot: true,
-          title: "\u672A\u6765\u4FBF - \u5927\u5207\u306A\u4EBA\u3078\u306E\u624B\u7D19",
+          title: "SilentMemo - \u5927\u5207\u306A\u4EBA\u3078\u306E\u624B\u7D19",
           description: "\u672A\u6765\u306E\u7279\u5225\u306A\u65E5\u306B\u5C4A\u304F\u624B\u7D19\u304C\u3042\u306A\u305F\u3092\u5F85\u3063\u3066\u3044\u307E\u3059\u3002"
         };
       }
@@ -3035,7 +3224,8 @@ var appRouter = router({
      * - WHERE isUnlocked = false で原子的更新（二重開封レース防止）
      */
     markOpened: publicProcedure.input(z2.object({
-      shareToken: z2.string()
+      shareToken: z2.string(),
+      userAgent: z2.string().optional()
     })).mutation(async ({ input }) => {
       const letter = await getLetterByShareToken(input.shareToken);
       if (!letter) {
@@ -3049,13 +3239,13 @@ var appRouter = router({
       if (unlockAt && now < unlockAt) {
         return { success: false, error: "not_yet" };
       }
-      const isFirstOpen = await unlockLetter(letter.id);
+      const isFirstOpen = await unlockLetter(letter.id, input.userAgent);
       if (isFirstOpen) {
         try {
           const { notifyOwner: notifyOwner2 } = await Promise.resolve().then(() => (init_notification(), notification_exports));
           const unlockTimeStr = (/* @__PURE__ */ new Date()).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
           await notifyOwner2({
-            title: `\u672A\u6765\u4FBF: \u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F`,
+            title: `SilentMemo: \u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F`,
             content: `\u3042\u306A\u305F\u306E\u624B\u7D19\u304C\u958B\u5C01\u3055\u308C\u307E\u3057\u305F\u3002
 
 \u5B9B\u5148: ${letter.recipientName || "\u672A\u8A2D\u5B9A"} 
@@ -3411,7 +3601,7 @@ var appRouter = router({
         input.topic
       );
       const systemPrompt = `
-\u3042\u306A\u305F\u306F\u300C\u672A\u6765\u4FBF\u300D\u3068\u3044\u3046\u30B5\u30FC\u30D3\u30B9\u306EAI\u30A4\u30F3\u30BF\u30D3\u30E5\u30A2\u30FC\u3067\u3059\u3002
+\u3042\u306A\u305F\u306F\u300CSilentMemo\u300D\u3068\u3044\u3046\u30B5\u30FC\u30D3\u30B9\u306EAI\u30A4\u30F3\u30BF\u30D3\u30E5\u30A2\u30FC\u3067\u3059\u3002
 \u30E6\u30FC\u30B6\u30FC\u306F\u300C\u81EA\u5206\u53F2\u624B\u7D19\u300D\u3084\u300C\u5927\u5207\u306A\u4EBA\u3078\u306E\u624B\u7D19\u300D\u3092\u66F8\u3053\u3046\u3068\u3057\u3066\u3044\u307E\u3059\u304C\u3001\u4F55\u3092\u66F8\u3051\u3070\u3044\u3044\u304B\u60A9\u3093\u3067\u3044\u307E\u3059\u3002
 \u3042\u306A\u305F\u306E\u5F79\u5272\u306F\u3001\u30E6\u30FC\u30B6\u30FC\u306B\u512A\u3057\u304F\u8CEA\u554F\u3092\u6295\u3052\u304B\u3051\u3001\u5FC3\u306E\u4E2D\u306B\u3042\u308B\u60F3\u3044\u3084\u30A8\u30D4\u30BD\u30FC\u30C9\u3092\u5F15\u304D\u51FA\u3059\u3053\u3068\u3067\u3059\u3002
 
@@ -3460,7 +3650,7 @@ var appRouter = router({
       await addInterviewMessage(input.sessionId, "user", input.message);
       const history = await getInterviewHistory(input.sessionId);
       const systemPrompt = `
-\u3042\u306A\u305F\u306F\u300C\u672A\u6765\u4FBF\u300D\u3068\u3044\u3046\u30B5\u30FC\u30D3\u30B9\u306EAI\u30A4\u30F3\u30BF\u30D3\u30E5\u30A2\u30FC\u3067\u3059\u3002
+\u3042\u306A\u305F\u306F\u300CSilentMemo\u300D\u3068\u3044\u3046\u30B5\u30FC\u30D3\u30B9\u306EAI\u30A4\u30F3\u30BF\u30D3\u30E5\u30A2\u30FC\u3067\u3059\u3002
 \u30E6\u30FC\u30B6\u30FC\u306E\u30A8\u30D4\u30BD\u30FC\u30C9\u3092\u5F15\u304D\u51FA\u3057\u3001\u6700\u7D42\u7684\u306B\u611F\u52D5\u7684\u306A\u624B\u7D19\u304C\u66F8\u3051\u308B\u3088\u3046\u306B\u5C0E\u3044\u3066\u304F\u3060\u3055\u3044\u3002
 
 \u73FE\u5728\u306E\u72B6\u6CC1:
@@ -3808,9 +3998,9 @@ init_db();
 // server/reminderMailer.ts
 function buildReminderSubject(daysBefore) {
   if (daysBefore === 1) {
-    return "\u3010\u672A\u6765\u4FBF\u3011\u660E\u65E5\u304C\u958B\u5C01\u65E5\u3067\u3059";
+    return "\u3010SilentMemo\u3011\u660E\u65E5\u304C\u958B\u5C01\u65E5\u3067\u3059";
   }
-  return `\u3010\u672A\u6765\u4FBF\u3011\u958B\u5C01\u65E5\u304C\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059\uFF08\u3042\u3068${daysBefore}\u65E5\uFF09`;
+  return `\u3010SilentMemo\u3011\u958B\u5C01\u65E5\u304C\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059\uFF08\u3042\u3068${daysBefore}\u65E5\uFF09`;
 }
 function buildReminderBodyHtml(params) {
   const { recipientName, unlockAt, daysBefore, letterManagementUrl } = params;
@@ -3870,7 +4060,7 @@ function buildReminderBodyHtml(params) {
   <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
 
   <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
-    \u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002<br>
+    \u3053\u306E\u30E1\u30FC\u30EB\u306FSilentMemo\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002<br>
     \u30EA\u30DE\u30A4\u30F3\u30C0\u30FC\u8A2D\u5B9A\u306F<a href="${letterManagementUrl}" style="color: #D97706;">\u30DE\u30A4\u30EC\u30BF\u30FC</a>\u304B\u3089\u5909\u66F4\u3067\u304D\u307E\u3059\u3002
   </p>
 </body>
@@ -3889,7 +4079,7 @@ function buildReminderBodyText(params) {
   const recipientLabel = recipientName || "\u5927\u5207\u306A\u4EBA";
   const daysText = daysBefore === 1 ? "\u660E\u65E5" : `\u3042\u3068${daysBefore}\u65E5`;
   return `
-\u3010\u672A\u6765\u4FBF\u3011\u958B\u5C01\u65E5\u304C\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059
+\u3010SilentMemo\u3011\u958B\u5C01\u65E5\u304C\u8FD1\u3065\u3044\u3066\u3044\u307E\u3059
 
 \u300C${recipientLabel}\u300D\u3078\u306E\u624B\u7D19\u306F${daysText}\u3067\u958B\u5C01\u65E5\u3092\u8FCE\u3048\u307E\u3059\u3002
 
@@ -3905,7 +4095,7 @@ ${letterManagementUrl}
 \u203B\u30ED\u30B0\u30A4\u30F3\u304C\u5FC5\u8981\u3067\u3059
 
 ---
-\u3053\u306E\u30E1\u30FC\u30EB\u306F\u672A\u6765\u4FBF\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
+\u3053\u306E\u30E1\u30FC\u30EB\u306FSilentMemo\u304B\u3089\u306E\u81EA\u52D5\u9001\u4FE1\u3067\u3059\u3002
 \u30EA\u30DE\u30A4\u30F3\u30C0\u30FC\u8A2D\u5B9A\u306F\u30DE\u30A4\u30EC\u30BF\u30FC\u304B\u3089\u5909\u66F4\u3067\u304D\u307E\u3059\u3002
   `.trim();
 }
