@@ -19,7 +19,7 @@ import { ENV } from "./env";
  */
 export function getAppBaseUrl(): string {
     // Priority 1: Explicit APP_BASE_URL
-    if (ENV.appBaseUrl && ENV.appBaseUrl !== "https://miraibin.web.app") {
+    if (ENV.appBaseUrl && ENV.appBaseUrl !== "https://silent-memo.web.app") {
         return ENV.appBaseUrl.replace(/\/$/, "");
     }
 

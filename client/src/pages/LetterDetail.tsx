@@ -279,7 +279,7 @@ ${letter.templateUsed || "カスタム"}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 エクスポート日時: ${format(new Date(), "yyyy年MM月dd日 HH:mm", { locale: ja })}
-SilentMemo (https://miraibin.web.app)
+SilentMemo (https://silent-memo.web.app)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `.trim();
 
