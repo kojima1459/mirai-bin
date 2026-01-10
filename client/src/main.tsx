@@ -57,7 +57,7 @@ const trpcClient = trpc.createClient({
   ],
 });
 
-// Safe Analytics Injection
+// Safe Analytics Injection (Umami)
 const analyticsEndpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;
 const analyticsWebsiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
 
@@ -67,6 +67,21 @@ if (analyticsEndpoint && analyticsWebsiteId) {
   s.src = `${analyticsEndpoint.replace(/\/$/, "")}/umami`;
   s.dataset.websiteId = analyticsWebsiteId;
   document.head.appendChild(s);
+}
+
+// Google Analytics 4 Injection
+const ga4MeasurementId = import.meta.env.VITE_GA4_MEASUREMENT_ID;
+if (ga4MeasurementId) {
+  const gaScript = document.createElement("script");
+  gaScript.async = true;
+  gaScript.src = `https://www.googletagmanager.com/gtag/js?id=${ga4MeasurementId}`;
+  document.head.appendChild(gaScript);
+
+  (window as any).dataLayer = (window as any).dataLayer || [];
+  const gtag = (...args: any[]) => { (window as any).dataLayer.push(args); };
+  (window as any).gtag = gtag;
+  gtag('js', new Date());
+  gtag('config', ga4MeasurementId);
 }
 
 // Service Worker Registration with BUILD_ID

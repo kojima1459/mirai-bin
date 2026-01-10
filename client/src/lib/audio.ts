@@ -21,6 +21,8 @@ export class VoiceRecorder {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1, // Mono for voice
           sampleRate: 16000, // Whisper推奨
         },
       });

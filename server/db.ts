@@ -196,6 +196,41 @@ export async function deleteLetter(id: number): Promise<void> {
     throw new Error("Database not available");
   }
 
+  // Fetch letter to get storage URLs before deleting
+  const letterResult = await db.select().from(letters).where(eq(letters.id, id)).limit(1);
+  const letter = letterResult[0];
+
+  if (letter) {
+    // Import storage delete function dynamically to avoid circular deps
+    const { storageDelete } = await import("./storage");
+
+    // Parse storage key from URL and delete files
+    const parseStorageKey = (url: string | null): string | null => {
+      if (!url) return null;
+      // URLs look like: https://storage.googleapis.com/miraibin.firebasestorage.app/audio/xyz.webm
+      const match = url.match(/miraibin\.firebasestorage\.app\/(.+)$/);
+      return match ? match[1] : null;
+    };
+
+    // Delete audio file if exists
+    const audioKey = parseStorageKey(letter.audioUrl);
+    if (audioKey) {
+      await storageDelete(audioKey).catch(e => console.warn("Failed to delete audio:", e));
+    }
+
+    // Delete ciphertext file if exists
+    const textKey = parseStorageKey(letter.ciphertextUrl);
+    if (textKey) {
+      await storageDelete(textKey).catch(e => console.warn("Failed to delete ciphertext:", e));
+    }
+
+    // Delete encrypted audio file if exists
+    const encAudioKey = parseStorageKey(letter.encryptedAudioUrl);
+    if (encAudioKey) {
+      await storageDelete(encAudioKey).catch(e => console.warn("Failed to delete enc audio:", e));
+    }
+  }
+
   await db.delete(letters).where(eq(letters.id, id));
 }
 

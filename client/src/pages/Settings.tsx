@@ -3,12 +3,13 @@ import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users, Shield, Clock, AlertCircle, CheckCircle2, Smartphone, Info } from "lucide-react";
+import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users, Shield, Clock, AlertCircle, CheckCircle2, Smartphone, Info, Download } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,9 @@ export default function Settings() {
   const [hasTrustedChanges, setHasTrustedChanges] = useState(false);
   const [hasEmailChanges, setHasEmailChanges] = useState(false);
   const [hasReminderChanges, setHasReminderChanges] = useState(false);
+
+  // PWA install hook
+  const pwa = usePWAInstall();
 
   // 設定を取得
   const { data: settings, isLoading: settingsLoading } = trpc.user.getSettings.useQuery(
@@ -273,6 +277,47 @@ export default function Settings() {
               </Link>
             </div>
           </section>
+
+          {/* アプリインストール */}
+          {(pwa.canInstall || pwa.isIOS) && !pwa.isInstalled && (
+            <section className="space-y-4 pt-4">
+              <h2 className="text-xs font-bold text-white/40 tracking-wider px-2">APP</h2>
+              <div className="bg-white/5 border border-white/5 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <Download className="h-5 w-5 text-white/60" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-white">アプリをインストール</h2>
+                    <p className="text-xs text-white/40">ホーム画面に追加してすばやくアクセス</p>
+                  </div>
+                </div>
+
+                {pwa.canInstall ? (
+                  <Button
+                    onClick={async () => {
+                      const success = await pwa.promptInstall();
+                      if (success) {
+                        toast.success("アプリをインストールしました！");
+                      }
+                    }}
+                    className="w-full bg-white text-black hover:bg-white/90 rounded-full"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    ホーム画面に追加
+                  </Button>
+                ) : pwa.isIOS ? (
+                  <div className="bg-white/5 rounded-lg p-4 text-sm text-white/60">
+                    <p className="mb-2">iOSでインストールするには：</p>
+                    <ol className="list-decimal pl-4 space-y-1 text-xs">
+                      <li>Safariの共有ボタン（下部の□↑）をタップ</li>
+                      <li>「ホーム画面に追加」を選択</li>
+                    </ol>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          )}
 
           {/* 通知設定セクション */}
           <section className="space-y-4 pt-4">
