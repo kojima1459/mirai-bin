@@ -2,8 +2,9 @@
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Search, ChevronRight, X } from "lucide-react";
+import { Search, ChevronRight, X, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TemplatePreviewDialog } from "@/components/create-letter/TemplatePreviewDialog";
 
 interface Template {
     id: number;
@@ -61,6 +62,7 @@ export function TemplateCatalogDialog({
 }: TemplateCatalogDialogProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
+    const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
 
     const filteredTemplates = useMemo(() => {
         let filtered = templates;
@@ -147,7 +149,7 @@ export function TemplateCatalogDialog({
                             {filteredTemplates.map((template) => (
                                 <button
                                     key={template.id}
-                                    onClick={() => onSelect(template.name)}
+                                    onClick={() => setPreviewTemplate(template)}
                                     className="w-full text-left p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 hover:border-white/10 transition-all group flex items-center gap-4 active:scale-[0.98]"
                                 >
                                     <div className="flex-1 min-w-0">
@@ -172,7 +174,7 @@ export function TemplateCatalogDialog({
                                             {template.subtitle || template.description}
                                         </p>
                                     </div>
-                                    <ChevronRight className="h-5 w-5 text-white/20 group-hover:text-white/60 transition-colors" />
+                                    <Eye className="h-5 w-5 text-white/20 group-hover:text-white/60 transition-colors" />
                                 </button>
                             ))}
                         </div>
@@ -193,6 +195,13 @@ export function TemplateCatalogDialog({
                     )}
                 </div>
             </DialogContent>
+
+            <TemplatePreviewDialog
+                isOpen={!!previewTemplate}
+                onClose={() => setPreviewTemplate(null)}
+                template={previewTemplate}
+                onSelect={onSelect}
+            />
         </Dialog>
     );
 }

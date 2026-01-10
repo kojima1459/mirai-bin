@@ -241,7 +241,7 @@ export default function LetterDetail() {
                 .page:last-child { page-break-after: avoid; }
               }
               body { 
-                font-family: 'Hiragino Kaku Gothic ProN', 'MS Gothic', sans-serif; 
+                font-family: var(--font-serif); 
                 margin: 0; 
                 padding: 40px;
                 color: #333;
@@ -274,7 +274,7 @@ export default function LetterDetail() {
                 margin: 30px auto;
               }
               .code-box {
-                font-family: 'Courier New', monospace;
+                font-family: monospace;
                 font-size: 24px;
                 letter-spacing: 4px;
                 padding: 20px 30px;
@@ -285,7 +285,7 @@ export default function LetterDetail() {
                 margin: 20px 0;
               }
               .url-box {
-                font-family: 'Courier New', monospace;
+                font-family: monospace;
                 font-size: 12px;
                 padding: 15px;
                 background: #f8f8f8;

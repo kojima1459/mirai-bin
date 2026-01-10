@@ -8,21 +8,21 @@
  */
 
 export interface PdfExportParams {
-    shareUrl: string;
-    unlockCode: string;
-    backupShare: string | null;
+  shareUrl: string;
+  unlockCode: string;
+  backupShare: string | null;
 }
 
 /**
  * Generates HTML content for the 3-page PDF
  */
 export function generatePdfHtml(params: PdfExportParams): string {
-    const { shareUrl, unlockCode, backupShare } = params;
+  const { shareUrl, unlockCode, backupShare } = params;
 
-    // QR Code via Google Charts API
-    const qrCodeUrl = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(shareUrl)}&choe=UTF-8`;
+  // QR Code via Google Charts API
+  const qrCodeUrl = `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(shareUrl)}&choe=UTF-8`;
 
-    return `
+  return `
 <!DOCTYPE html>
 <html>
   <head>
@@ -34,7 +34,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
         .page:last-child { page-break-after: avoid; }
       }
       body { 
-        font-family: 'Hiragino Kaku Gothic ProN', 'MS Gothic', sans-serif; 
+        font-family: "Shippori Mincho", "Noto Serif JP", serif; 
         margin: 0; 
         padding: 40px;
         color: #333;
@@ -67,7 +67,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
         margin: 30px auto;
       }
       .code-box {
-        font-family: 'Courier New', monospace;
+        font-family: monospace;
         font-size: 24px;
         letter-spacing: 4px;
         padding: 20px 30px;
@@ -78,7 +78,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
         margin: 20px 0;
       }
       .url-box {
-        font-family: 'Courier New', monospace;
+        font-family: monospace;
         font-size: 12px;
         padding: 15px;
         background: #f8f8f8;
@@ -200,20 +200,20 @@ export function generatePdfHtml(params: PdfExportParams): string {
  * @returns true if print window opened successfully
  */
 export function openPrintDialog(params: PdfExportParams): boolean {
-    const html = generatePdfHtml(params);
+  const html = generatePdfHtml(params);
 
-    const printWindow = window.open('', '', 'width=800,height=600');
-    if (!printWindow) {
-        return false;
-    }
+  const printWindow = window.open('', '', 'width=800,height=600');
+  if (!printWindow) {
+    return false;
+  }
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+  printWindow.document.write(html);
+  printWindow.document.close();
 
-    // Wait for QR image to load before printing
-    setTimeout(() => {
-        printWindow.print();
-    }, 500);
+  // Wait for QR image to load before printing
+  setTimeout(() => {
+    printWindow.print();
+  }, 500);
 
-    return true;
+  return true;
 }

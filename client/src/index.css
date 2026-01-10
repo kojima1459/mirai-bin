@@ -73,7 +73,7 @@
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
-  --font-serif: "Times New Roman", Times, serif;
+  --font-serif: "Shippori Mincho", "Noto Serif JP", serif;
 }
 
 /* Light mode override (optional, for future use) */

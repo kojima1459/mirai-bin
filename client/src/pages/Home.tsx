@@ -29,6 +29,7 @@ import { Link } from "wouter";
 import { useState, useMemo } from "react";
 import { useAuth as useClientAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
+import { OnboardingDialog } from "@/components/OnboardingDialog";
 
 // アイコンマップ（拡張版）
 const iconMap: Record<string, React.ReactNode> = {
@@ -205,6 +206,8 @@ export default function Home() {
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
       </div>
+
+      <OnboardingDialog />
 
       {/* ヘッダー - LP style */}
       <header className="fixed top-0 w-full z-50 mix-blend-difference px-6 py-6 md:px-12 flex justify-between items-center">

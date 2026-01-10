@@ -26,6 +26,7 @@ import { TemplateSelectStep } from "@/components/create-letter/TemplateSelectSte
 import { RecordingStep } from "@/components/create-letter/RecordingStep";
 import { ReviewStep } from "@/components/create-letter/ReviewStep";
 import { TranscriptEditStep } from "@/components/create-letter/TranscriptEditStep";
+import { LetterCreationProgressBar } from "@/components/create-letter/LetterCreationProgressBar";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -478,28 +479,7 @@ export default function CreateLetter() {
 
       <main className="container py-8 md:py-12 max-w-2xl relative z-10">
         {/* ステップインジケーター */}
-        <div className="flex items-center justify-center gap-2 mb-12">
-          {["template", "recording", "editing", "complete"].map((s, i) => {
-            const isActive = step === s || (step === "transcribing" && s === "recording") || (step === "generating" && s === "recording") || (step === "encrypting" && s === "editing");
-            const isCompleted = ["template", "recording", "transcribing", "generating", "editing", "encrypting", "complete"].indexOf(step) > ["template", "recording", "editing", "complete"].indexOf(s);
-
-            return (
-              <div key={s} className="flex items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${isActive
-                    ? "bg-white text-black"
-                    : isCompleted
-                      ? "bg-white/20 text-white"
-                      : "bg-white/5 text-white/30"
-                    }`}
-                >
-                  {isCompleted ? <Check className="h-4 w-4" /> : i + 1}
-                </div>
-                {i < 3 && <div className={`w-8 h-[1px] mx-2 ${isCompleted ? "bg-white/20" : "bg-white/5"}`} />}
-              </div>
-            );
-          })}
-        </div>
+        <LetterCreationProgressBar currentStep={step} />
 
         {/* テンプレート選択 */}
         {step === "template" && (
