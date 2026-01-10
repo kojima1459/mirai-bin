@@ -51,6 +51,31 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+/**
+ * Parse User-Agent string into a human-readable device description
+ */
+function parseUserAgent(ua: string): string {
+  if (!ua) return "不明";
+
+  // Detect OS
+  let os = "不明なOS";
+  if (ua.includes("iPhone")) os = "iPhone";
+  else if (ua.includes("iPad")) os = "iPad";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("Mac OS")) os = "Mac";
+  else if (ua.includes("Windows")) os = "Windows";
+  else if (ua.includes("Linux")) os = "Linux";
+
+  // Detect Browser
+  let browser = "";
+  if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
+  else if (ua.includes("Chrome") && !ua.includes("Edg")) browser = "Chrome";
+  else if (ua.includes("Edg")) browser = "Edge";
+  else if (ua.includes("Firefox")) browser = "Firefox";
+
+  return browser ? `${os} / ${browser}` : os;
+}
+
 export default function LetterDetail() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
@@ -560,13 +585,26 @@ export default function LetterDetail() {
             </CardHeader>
             <CardContent>
               {isOpened ? (
-                <div className="p-4 bg-muted/50 rounded-lg text-center">
-                  <p className="text-sm text-muted-foreground">
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <p className="text-sm text-muted-foreground text-center">
                     この手紙は既に開封されているため、スケジュールの変更はできません。
                   </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    開封日時: {letter.unlockedAt && format(new Date(letter.unlockedAt), "yyyy年M月d日 HH:mm", { locale: ja })}
-                  </p>
+                  <div className="border-t pt-3 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">開封日時</span>
+                      <span className="font-medium">
+                        {letter.unlockedAt && format(new Date(letter.unlockedAt), "yyyy年M月d日 HH:mm", { locale: ja })}
+                      </span>
+                    </div>
+                    {(letter as any).openedUserAgent && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">端末情報</span>
+                        <span className="font-medium text-xs max-w-[200px] truncate" title={(letter as any).openedUserAgent}>
+                          {parseUserAgent((letter as any).openedUserAgent)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : isEditingSchedule ? (
                 <div className="space-y-6">

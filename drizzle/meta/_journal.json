@@ -99,6 +99,13 @@
       "when": 1768002344605,
       "tag": "0013_sudden_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1768016075433,
+      "tag": "0014_slim_warbound",
+      "breakpoints": true
     }
   ]
 }

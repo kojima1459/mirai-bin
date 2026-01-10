@@ -114,7 +114,10 @@ export function useLetterDecryption({ shareToken, onSuccess }: UseLetterDecrypti
             }
 
             // Success side effects
-            await markOpenedMutation.mutateAsync({ shareToken }).catch(e => {
+            await markOpenedMutation.mutateAsync({
+                shareToken,
+                userAgent: navigator.userAgent
+            }).catch(e => {
                 console.warn("Failed to mark as opened", e);
                 // Non-fatal
             });
@@ -226,7 +229,10 @@ export function useLetterDecryption({ shareToken, onSuccess }: UseLetterDecrypti
             }
 
             // Success side effects
-            await markOpenedMutation.mutateAsync({ shareToken }).catch(e => {
+            await markOpenedMutation.mutateAsync({
+                shareToken,
+                userAgent: navigator.userAgent
+            }).catch(e => {
                 console.warn("Failed to mark as opened", e);
             });
 

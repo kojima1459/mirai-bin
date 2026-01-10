@@ -88,6 +88,7 @@ export const letters = mysqlTable("letters", {
   unlockPolicy: varchar("unlockPolicy", { length: 50 }).default("datetime"),
   isUnlocked: boolean("isUnlocked").default(false).notNull(),
   unlockedAt: timestamp("unlockedAt"),
+  openedUserAgent: text("openedUserAgent"), // 開封時のUser-Agent（端末情報）
 
   // 共有リンク関連
   shareToken: varchar("shareToken", { length: 64 }).unique(),

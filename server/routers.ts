@@ -878,6 +878,7 @@ export const appRouter = router({
     markOpened: publicProcedure
       .input(z.object({
         shareToken: z.string(),
+        userAgent: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         const letter = await getLetterByShareToken(input.shareToken);
@@ -897,8 +898,8 @@ export const appRouter = router({
           return { success: false, error: "not_yet" };
         }
 
-        // 原子的更新（既に開封済みならfalseが返る）
-        const isFirstOpen = await unlockLetter(letter.id);
+        // 原子的更新（既に開封済みならfalseが返る） + userAgent保存
+        const isFirstOpen = await unlockLetter(letter.id, input.userAgent);
 
         // 初回開封時にオーナーに通知
         if (isFirstOpen) {

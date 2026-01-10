@@ -239,9 +239,10 @@ export async function incrementViewCount(id: number): Promise<void> {
  * WHERE isUnlocked = false で二重開封レースを防止
  * 
  * @param id 手紙ID
+ * @param userAgent 開封時のUser-Agent（端末情報）
  * @returns 更新が成功したかどうか（既に開封済みの場合はfalse）
  */
-export async function unlockLetter(id: number): Promise<boolean> {
+export async function unlockLetter(id: number, userAgent?: string): Promise<boolean> {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
@@ -250,7 +251,8 @@ export async function unlockLetter(id: number): Promise<boolean> {
   // 原子的更新: isUnlocked = false の場合のみ更新
   const result = await db.update(letters).set({
     isUnlocked: true,
-    unlockedAt: new Date()
+    unlockedAt: new Date(),
+    openedUserAgent: userAgent || null,
   }).where(and(eq(letters.id, id), eq(letters.isUnlocked, false)));
 
   // affectedRows > 0 なら初回開封
