@@ -249,6 +249,61 @@ export const appRouter = router({
       }),
 
     /**
+     * アカウント完全削除
+     * すべてのデータを削除: 手紙、下書き、リマインダー、プッシュ購読
+     */
+    deleteAccount: protectedProcedure
+      .input(z.object({
+        confirmEmail: z.string().email(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        if (input.confirmEmail !== ctx.user.email) {
+          throw new Error("確認用メールアドレスが一致しません");
+        }
+
+        const userId = ctx.user.id;
+
+        try {
+          const { storageDelete } = await import("./storage");
+
+          // Delete all letters and their storage
+          const letters = await getLettersByAuthor(userId);
+          for (const letter of letters) {
+            const parseKey = (url: string | null) => url?.match(/miraibin\.firebasestorage\.app\/(.+)$/)?.[1];
+            const keys = [parseKey(letter.audioUrl), parseKey(letter.ciphertextUrl), parseKey(letter.encryptedAudioUrl)].filter(Boolean) as string[];
+            for (const key of keys) await storageDelete(key).catch(() => { });
+            await deleteRemindersByLetterId(letter.id);
+            await deleteLetter(letter.id);
+          }
+
+          // Delete drafts
+          const drafts = await getDraftsByUser(userId);
+          for (const draft of drafts) {
+            if (draft.audioUrl) {
+              const key = draft.audioUrl.match(/miraibin\.firebasestorage\.app\/(.+)$/)?.[1];
+              if (key) await storageDelete(key).catch(() => { });
+            }
+            await deleteDraft(draft.id);
+          }
+
+          // Delete push subscriptions
+          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+
+          // Delete user
+          await db.delete(users).where(eq(users.id, userId));
+
+          console.log(`[Account Deletion] User ${userId} deleted`);
+          return { success: true };
+        } catch (error) {
+          console.error(`[Account Deletion] Failed:`, error);
+          throw new Error("アカウント削除に失敗しました");
+        }
+      }),
+
+    /**
      * アカウントメールを変更
      * 注意: 実際の本番環境では確認メール送信が必要
      * 現在は簡易的に即座変更

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users, Shield, Clock, AlertCircle, CheckCircle2, Smartphone, Info, Download } from "lucide-react";
+import { ArrowLeft, Mail, Bell, Save, Loader2, Check, Users, Shield, Clock, AlertCircle, CheckCircle2, Smartphone, Info, Download, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,11 @@ export default function Settings() {
   const [hasTrustedChanges, setHasTrustedChanges] = useState(false);
   const [hasEmailChanges, setHasEmailChanges] = useState(false);
   const [hasReminderChanges, setHasReminderChanges] = useState(false);
+
+  // Account deletion states
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // PWA install hook
   const pwa = usePWAInstall();
@@ -86,6 +91,27 @@ export default function Settings() {
       toast.error("更新に失敗しました", { description: error.message });
     },
   });
+
+  // アカウント削除
+  const deleteAccountMutation = trpc.user.deleteAccount.useMutation({
+    onSuccess: () => {
+      toast.success("アカウントを削除しました");
+      window.location.href = "/login";
+    },
+    onError: (error) => {
+      toast.error("削除に失敗しました", { description: error.message });
+      setIsDeleting(false);
+    },
+  });
+
+  const handleDeleteAccount = async () => {
+    if (!deleteConfirmEmail.trim()) {
+      toast.error("確認用メールアドレスを入力してください");
+      return;
+    }
+    setIsDeleting(true);
+    deleteAccountMutation.mutate({ confirmEmail: deleteConfirmEmail.trim() });
+  };
 
   // 初期値を設定
   useEffect(() => {
@@ -526,6 +552,76 @@ export default function Settings() {
                   家族グループを管理
                 </Button>
               </Link>
+            </div>
+          </section>
+
+          {/* 危険ゾーン */}
+          <section className="space-y-4 pt-4">
+            <h2 className="text-xs font-bold text-red-400/60 tracking-wider px-2">DANGER ZONE</h2>
+
+            <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-red-300">アカウントを削除</h2>
+                  <p className="text-xs text-red-400/60">すべてのデータが完全に削除されます</p>
+                </div>
+              </div>
+
+              {!showDeleteDialog ? (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-full"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  アカウントを削除する
+                </Button>
+              ) : (
+                <div className="space-y-4 p-4 bg-red-500/10 rounded-lg">
+                  <p className="text-sm text-red-200">
+                    この操作は取り消せません。すべての手紙、下書き、設定が削除されます。
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="deleteConfirmEmail" className="text-red-300 text-sm">
+                      確認のため、アカウントメール（{settings?.accountEmail}）を入力してください:
+                    </Label>
+                    <Input
+                      id="deleteConfirmEmail"
+                      type="email"
+                      placeholder={settings?.accountEmail || ""}
+                      value={deleteConfirmEmail}
+                      onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                      className="bg-black/20 border-red-500/30 text-white placeholder:text-white/30"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowDeleteDialog(false);
+                        setDeleteConfirmEmail("");
+                      }}
+                      className="flex-1 border-white/20 text-white/70"
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      onClick={handleDeleteAccount}
+                      disabled={isDeleting || deleteConfirmEmail !== settings?.accountEmail}
+                      className="flex-1 bg-red-600 text-white hover:bg-red-700"
+                    >
+                      {isDeleting ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />削除中...</>
+                      ) : (
+                        <>削除を実行</>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </section>        </motion.div>
       </main>

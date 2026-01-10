@@ -248,6 +248,54 @@ export default function LetterDetail() {
 
   const reminderDayOptions = [1, 2, 3, 4, 5, 6, 7];
 
+  // Export letter as text file
+  const handleExportText = () => {
+    if (!letter) return;
+
+    const content = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+未来便 - 手紙のバックアップ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【宛先】
+${letter.recipientName || "未設定"}${letter.recipientRelation ? ` (${letter.recipientRelation})` : ""}
+
+【作成日】
+${format(new Date(letter.createdAt), "yyyy年MM月dd日 HH:mm", { locale: ja })}
+
+【開封予定日】
+${letter.unlockAt ? format(new Date(letter.unlockAt), "yyyy年MM月dd日 HH:mm", { locale: ja }) : "未設定"}
+
+【開封状況】
+${letter.unlockedAt ? `開封済み（${format(new Date(letter.unlockedAt), "yyyy年MM月dd日 HH:mm", { locale: ja })}）` : "未開封"}
+
+【使用テンプレート】
+${letter.templateUsed || "カスタム"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+※ 手紙の本文はクライアント側で暗号化されているため、
+   このファイルには含まれていません。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+エクスポート日時: ${format(new Date(), "yyyy年MM月dd日 HH:mm", { locale: ja })}
+未来便 (https://miraibin.web.app)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`.trim();
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `未来便_${letter.recipientName || "手紙"}_${format(new Date(), "yyyyMMdd")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success("手紙情報をエクスポートしました");
+  };
+
   // 再発行後の封筒PDF出力
   const handleExportRegeneratedPDF = (unlockCode: string, shareUrl: string | null) => {
     if (!unlockCode) return;
@@ -560,7 +608,7 @@ export default function LetterDetail() {
               </div>
 
               {/* Preview Button */}
-              <div className="pt-4 mt-4 border-t border-white/5">
+              <div className="pt-4 mt-4 border-t border-white/5 space-y-2">
                 <Button
                   variant="outline"
                   onClick={() => setShowPreviewDialog(true)}
@@ -568,6 +616,14 @@ export default function LetterDetail() {
                 >
                   <Eye className="mr-2 h-4 w-4" />
                   受取人視点でプレビュー
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleExportText}
+                  className="w-full bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  テキストで保存
                 </Button>
               </div>
             </CardContent>
