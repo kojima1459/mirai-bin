@@ -33,6 +33,7 @@ const Interview = lazy(() => import("./pages/Interview"));
 const Family = lazy(() => import("./pages/Family"));
 const FamilyInvite = lazy(() => import("./pages/FamilyInvite"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const Contact = lazy(() => import("./pages/Contact"));
 
 // Loading fallback
 function PageLoader() {
@@ -73,6 +74,9 @@ function Router() {
           </Route>
           <Route path={"/terms"}>
             <PageTransition><Terms /></PageTransition>
+          </Route>
+          <Route path={"/contact"}>
+            <PageTransition><Contact /></PageTransition>
           </Route>
           <Route path={"/lp"}>
             <PageTransition><Landing /></PageTransition>

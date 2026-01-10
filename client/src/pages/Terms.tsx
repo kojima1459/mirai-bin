@@ -141,7 +141,12 @@ export default function Terms() {
           <section className="space-y-4">
             <h2 className="text-xl font-bold tracking-tight border-b border-white/10 pb-3">第12条（お問い合わせ）</h2>
             <p className="text-white/60 leading-relaxed">
-              本規約に関するご質問は、サービス内のお問い合わせフォームよりご連絡ください。
+              本規約に関するご質問は、下記メールアドレスまでお問い合わせください。
+            </p>
+            <p className="text-white/60">
+              <a href="mailto:mk19830920@gmail.com" className="text-amber-400 hover:text-amber-300 underline">
+                mk19830920@gmail.com
+              </a>
             </p>
           </section>
 
