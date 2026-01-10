@@ -115,7 +115,7 @@ export function DecryptedLetterView({
                 >
                     <Link href="/">
                         <span className="text-sm text-white/40 hover:text-white cursor-pointer transition-colors border-b border-transparent hover:border-white/20 pb-0.5">
-                            mirai-bin Top
+                            silentmemo Top
                         </span>
                     </Link>
                 </motion.div>

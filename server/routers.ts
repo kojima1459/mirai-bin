@@ -801,7 +801,7 @@ export const appRouter = router({
           // BotにはOGP用の最小限の情報のみ返す
           return {
             isBot: true,
-            title: "未来便 - 大切な人への手紙",
+            title: "SilentMemo - 大切な人への手紙",
             description: "未来の特別な日に届く手紙があなたを待っています。",
           };
         }
@@ -963,7 +963,7 @@ export const appRouter = router({
             const { notifyOwner } = await import("./_core/notification");
             const unlockTimeStr = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
             await notifyOwner({
-              title: `未来便: 手紙が開封されました`,
+              title: `SilentMemo: 手紙が開封されました`,
               content: `あなたの手紙が開封されました。\n\n宛先: ${letter.recipientName || "未設定"} \n開封日時: ${unlockTimeStr} \n\n※ 本文はゼロ知識設計のため、運営者も読めません。`,
             });
           } catch (err) {
@@ -1409,7 +1409,7 @@ export const appRouter = router({
 
         // AIからの最初の挨拶を生成（LLM呼び出し）
         const systemPrompt = `
-あなたは「未来便」というサービスのAIインタビュアーです。
+あなたは「SilentMemo」というサービスのAIインタビュアーです。
 ユーザーは「自分史手紙」や「大切な人への手紙」を書こうとしていますが、何を書けばいいか悩んでいます。
 あなたの役割は、ユーザーに優しく質問を投げかけ、心の中にある想いやエピソードを引き出すことです。
 
@@ -1475,7 +1475,7 @@ export const appRouter = router({
 
         // LLMコンテキスト構築
         const systemPrompt = `
-あなたは「未来便」というサービスのAIインタビュアーです。
+あなたは「SilentMemo」というサービスのAIインタビュアーです。
 ユーザーのエピソードを引き出し、最終的に感動的な手紙が書けるように導いてください。
 
 現在の状況:

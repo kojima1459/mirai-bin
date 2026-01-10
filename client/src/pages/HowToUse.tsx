@@ -126,9 +126,9 @@ export default function HowToUse() {
           {/* Title */}
           <div className="text-center mb-16">
             <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase block mb-4">How to Use</span>
-            <h1 className="text-4xl font-bold tracking-tighter mb-6">未来便の使い方</h1>
+            <h1 className="text-4xl font-bold tracking-tighter mb-6">SilentMemoの使い方</h1>
             <p className="text-white/50 max-w-xl mx-auto leading-relaxed">
-              未来便は、大切な人への想いを「未来の特別な日」に届けるサービスです。
+              SilentMemoは、大切な人への想いを「未来の特別な日」に届けるサービスです。
               音声で想いを録音し、AIが心のこもった手紙に仕上げ、暗号化して安全に保管します。
             </p>
           </div>

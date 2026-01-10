@@ -56,7 +56,7 @@ export function TemplatePreviewDialog({
                         {/* Decor */}
                         <div className="w-full border-b border-black/10 pb-4 mb-4 flex justify-between items-center opacity-50">
                             <span className="text-[10px] font-mono tracking-widest">{new Date().getFullYear()}.XX.XX</span>
-                            <span className="text-[10px] font-serif">未来便</span>
+                            <span className="text-[10px] font-serif">SilentMemo</span>
                         </div>
 
                         {/* Content Mock */}

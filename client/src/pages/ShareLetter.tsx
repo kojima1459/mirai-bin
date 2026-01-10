@@ -10,6 +10,7 @@ import { EmergencyUnlockDialog } from "@/components/share/EmergencyUnlockDialog"
 import { deriveShareLetterState, ShareLetterState } from "@/lib/shareLetterState";
 import { AnimatePresence } from "framer-motion";
 import { useLetterDecryption } from "@/hooks/useLetterDecryption";
+import { EnvelopeOpeningAnimation } from "@/components/share/EnvelopeOpeningAnimation";
 import { toast } from "sonner";
 
 export default function ShareLetter() {
@@ -20,6 +21,8 @@ export default function ShareLetter() {
   // UI State
   const [unlockCode, setUnlockCode] = useState("");
   const [showEmergencyDialog, setShowEmergencyDialog] = useState(false);
+  const [showEnvelopeAnimation, setShowEnvelopeAnimation] = useState(false);
+  const [showDecryptedContent, setShowDecryptedContent] = useState(false);
 
   // Custom Hook for Logic Refactor
   const {
@@ -34,8 +37,16 @@ export default function ShareLetter() {
     shareToken,
     onSuccess: () => {
       setShowEmergencyDialog(false);
+      // Trigger envelope opening animation
+      setShowEnvelopeAnimation(true);
     }
   });
+
+  // Handle envelope animation completion
+  const handleEnvelopeAnimationComplete = () => {
+    setShowEnvelopeAnimation(false);
+    setShowDecryptedContent(true);
+  };
 
   // tRPC Query
   const {
@@ -84,7 +95,7 @@ export default function ShareLetter() {
   // Effects for meta tag
   useEffect(() => {
     if (data?.letter?.recipientName) {
-      document.title = `${data.letter.recipientName}への手紙 | 未来便`;
+      document.title = `${data.letter.recipientName}への手紙 | SilentMemo`;
     }
   }, [data]);
 
@@ -122,8 +133,15 @@ export default function ShareLetter() {
 
   return (
     <>
+      {/* Envelope Opening Animation */}
+      <EnvelopeOpeningAnimation
+        isOpen={showEnvelopeAnimation}
+        onComplete={handleEnvelopeAnimationComplete}
+        recipientName={data?.letter?.recipientName ?? undefined}
+      />
+
       <AnimatePresence mode="wait">
-        {decryptedContent ? (
+        {showDecryptedContent && decryptedContent ? (
           <DecryptedLetterView
             key="decrypted"
             content={decryptedContent.content}

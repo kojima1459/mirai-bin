@@ -33,7 +33,7 @@ export default function AccountRecovery() {
         <html>
           <head>
             <meta charset="UTF-8">
-            <title>未来便 - 引き継ぎガイド</title>
+            <title>SilentMemo - 引き継ぎガイド</title>
             <style>
               @media print { .page { page-break-after: always; } .page:last-child { page-break-after: avoid; } }
               body { font-family: 'Hiragino Kaku Gothic ProN', sans-serif; margin: 0; padding: 40px; color: #333; line-height: 1.8; }
@@ -53,17 +53,17 @@ export default function AccountRecovery() {
           <body>
             <div class="page">
               <div class="header">
-                <h1>未来便 - 引き継ぎガイド</h1>
+                <h1>SilentMemo - 引き継ぎガイド</h1>
                 <div style="color:#666;font-size:12px;">生成日: ${format(new Date(), "yyyy年M月d日", { locale: ja })}</div>
               </div>
               <div class="section">
                 <h2>このサービスについて</h2>
-                <p>「未来便」は、大切な人へ未来の約束の日に届くメッセージを保管するサービスです。手紙は暗号化され、指定日まで誰にも読めません。</p>
+                <p>「SilentMemo」は、大切な人へ未来の約束の日に届くメッセージを保管するサービスです。手紙は暗号化され、指定日まで誰にも読めません。</p>
               </div>
               <div class="section">
                 <h2>ログイン情報</h2>
                 <div class="info-box">
-                  <p><strong>URL:</strong> https://mirai-bin.manus.space</p>
+                  <p><strong>URL:</strong> https://silentmemo.manus.space</p>
                   <p><strong>アカウントメール:</strong> ${settings?.accountEmail || "（設定画面で確認）"}</p>
                   <p><strong>通知先:</strong> ${settings?.notificationEmail || settings?.accountEmail || "未設定"}</p>
                   <p><strong>信頼できる通知先:</strong> ${settings?.trustedContactEmail || "未設定"}</p>
@@ -119,9 +119,9 @@ export default function AccountRecovery() {
   };
 
   const handleCopyExplanation = () => {
-    const text = `【未来便 アカウント引き継ぎ情報】
+    const text = `【SilentMemo アカウント引き継ぎ情報】
 
-私は「未来便」というサービスを使って、あなた（または子ども）に手紙を残しています。
+私は「SilentMemo」というサービスを使って、あなた（または子ども）に手紙を残しています。
 開封日が来たら、以下の手順で手紙を読むことができます。
 
 ■ 必要な情報
@@ -175,7 +175,7 @@ export default function AccountRecovery() {
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 flex items-start gap-4">
             <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-sm text-white/70 leading-relaxed">
-              未来便は「ゼロ知識設計」のため、運営者も手紙の本文や解錠コードを読めません。
+              SilentMemoは「ゼロ知識設計」のため、運営者も手紙の本文や解錠コードを読めません。
               アカウントを失うと手紙が永久に開封できなくなる可能性があります。
               このページの手順に従って、大切な人に引き継ぎ情報を残しておきましょう。
             </div>
@@ -293,8 +293,8 @@ export default function AccountRecovery() {
             </div>
 
             <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-5 text-sm text-white/60 leading-relaxed space-y-4">
-              <p className="font-semibold text-white">【未来便 アカウント引き継ぎ情報】</p>
-              <p>私は「未来便」というサービスを使って、あなた（または子ども）に手紙を残しています。開封日が来たら、以下の手順で手紙を読むことができます。</p>
+              <p className="font-semibold text-white">【SilentMemo アカウント引き継ぎ情報】</p>
+              <p>私は「SilentMemo」というサービスを使って、あなた（または子ども）に手紙を残しています。開封日が来たら、以下の手順で手紙を読むことができます。</p>
               <div>
                 <p className="font-medium text-white/80 mb-1">■ 必要な情報</p>
                 <ul className="list-disc list-inside ml-2 space-y-1">

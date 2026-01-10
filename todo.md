@@ -1,4 +1,4 @@
-# 未来便（Mirai-bin）TODO
+# SilentMemoTODO
 
 ## Day 1: コア機能 ✅ 完了
 - [x] 音声録音（90秒制限、Web Audio API）
@@ -243,7 +243,7 @@
 
 ### メール送信
 - [x] sendUnlockReminder関数実装
-- [x] 件名：「【未来便】開封日が近づいています（あとX日）」
+- [x] 件名：「【SilentMemo】開封日が近づいています（あとX日）」
 - [x] 本文：宛先ラベル、開封日、管理画面リンク、解錠コード再確認の案内
 
 ### Cronエンドポイント

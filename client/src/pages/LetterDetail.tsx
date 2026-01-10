@@ -254,7 +254,7 @@ export default function LetterDetail() {
 
     const content = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-未来便 - 手紙のバックアップ
+SilentMemo - 手紙のバックアップ
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 【宛先】
@@ -279,7 +279,7 @@ ${letter.templateUsed || "カスタム"}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 エクスポート日時: ${format(new Date(), "yyyy年MM月dd日 HH:mm", { locale: ja })}
-未来便 (https://miraibin.web.app)
+SilentMemo (https://miraibin.web.app)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `.trim();
 
@@ -287,7 +287,7 @@ ${letter.templateUsed || "カスタム"}
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `未来便_${letter.recipientName || "手紙"}_${format(new Date(), "yyyyMMdd")}.txt`;
+    a.download = `SilentMemo_${letter.recipientName || "手紙"}_${format(new Date(), "yyyyMMdd")}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -310,7 +310,7 @@ ${letter.templateUsed || "カスタム"}
         <html>
           <head>
             <meta charset="UTF-8">
-            <title>未来便 - 再発行封筒</title>
+            <title>SilentMemo - 再発行封筒</title>
             <style>
               @media print {
                 .page { page-break-after: always; }
@@ -412,7 +412,7 @@ ${letter.templateUsed || "カスタム"}
             <!-- ページ1: 共有リンク -->
             <div class="page">
               <div class="header">
-                <h1>未来便 - 共有リンク</h1>
+                <h1>SilentMemo - 共有リンク</h1>
                 <div class="subtitle">このページを受取人に渡してください</div>
               </div>
               <div class="content">
@@ -432,7 +432,7 @@ ${letter.templateUsed || "カスタム"}
             <!-- ページ2: 解錠コード -->
             <div class="page">
               <div class="header">
-                <h1>未来便 - 解錠コード（再発行）</h1>
+                <h1>SilentMemo - 解錠コード（再発行）</h1>
                 <div class="subtitle">このページを受取人に渡してください（共有リンクとは別経路で）</div>
               </div>
               <div class="content">

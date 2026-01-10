@@ -1,4 +1,4 @@
-# 未来便（Mirai-bin）設計メモ
+# SilentMemo設計メモ
 
 ## ChatGPT会話からの重要ポイント
 

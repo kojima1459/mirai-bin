@@ -34,7 +34,7 @@ export default function Contact() {
                         <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase block mb-4">Contact</span>
                         <h1 className="text-4xl font-bold tracking-tighter mb-4">お問い合わせ</h1>
                         <p className="text-white/50 leading-relaxed">
-                            未来便に関するご質問、ご要望、不具合のご報告などは
+                            SilentMemoに関するご質問、ご要望、不具合のご報告などは
                             下記メールアドレスまでお気軽にお問い合わせください。
                         </p>
                     </div>

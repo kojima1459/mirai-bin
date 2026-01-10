@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Lock, Send, Sparkles, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const ONBOARDING_KEY = "mirai-bin-onboarding-seen";
+const ONBOARDING_KEY = "silentmemo-onboarding-seen";
 
 export function OnboardingDialog() {
     const [isOpen, setIsOpen] = useState(false);
@@ -64,7 +64,7 @@ export function OnboardingDialog() {
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
             <DialogContent className="max-w-md w-full bg-[#050505] border-white/5 p-0 overflow-hidden sm:rounded-[32px] shadow-2xl shadow-black">
                 <DialogTitle className="sr-only">Onboarding Tutorial</DialogTitle>
-                <DialogDescription className="sr-only">Mirai-bin introduction slides</DialogDescription>
+                <DialogDescription className="sr-only">SilentMemo introduction slides</DialogDescription>
 
                 <div className="relative h-[600px] flex flex-col font-sans antialiased">
                     {/* Grain Texture */}

@@ -212,7 +212,7 @@ export default function Home() {
       {/* ヘッダー - LP style */}
       <header className="fixed top-0 w-full z-50 mix-blend-difference px-6 py-6 md:px-12 flex justify-between items-center">
         <Link href="/">
-          <div className="text-xl font-bold tracking-tighter cursor-pointer">mirai-bin</div>
+          <div className="text-xl font-bold tracking-tighter cursor-pointer">silentmemo</div>
         </Link>
         <nav className="flex gap-6 items-center text-sm font-medium">
           {isAuthenticated ? (
@@ -555,13 +555,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="text-sm text-white/40 space-y-4">
             <div className="flex justify-center gap-6 flex-wrap">
-              <Link href="/lp" className="hover:text-white transition-colors">未来便について</Link>
+              <Link href="/lp" className="hover:text-white transition-colors">SilentMemoについて</Link>
               <Link href="/how-to-use" className="hover:text-white transition-colors">使い方</Link>
               <Link href="/faq" className="hover:text-white transition-colors">FAQ</Link>
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
               <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
             </div>
-            <p className="text-white/20">© 2025 mirai-bin</p>
+            <p className="text-white/20">© 2025 silentmemo</p>
           </div>
         </div>
       </footer>

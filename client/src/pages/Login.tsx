@@ -57,7 +57,7 @@ export default function Login() {
                         <Mail className="w-9 h-9 text-white/80" />
                     </motion.div>
                     <div>
-                        <h1 className="text-4xl font-bold tracking-tighter mb-3">mirai-bin</h1>
+                        <h1 className="text-4xl font-bold tracking-tighter mb-3">silentmemo</h1>
                         <p className="text-white/50 text-sm">大切な想いを、未来に届ける</p>
                     </div>
                 </div>

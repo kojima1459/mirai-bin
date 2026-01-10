@@ -5,8 +5,8 @@
 
 import { get, set, del, keys, createStore } from "idb-keyval";
 
-// カスタムストアを作成（未来便専用）
-const miraiBinStore = createStore("mirai-bin-db", "drafts");
+// カスタムストアを作成（SilentMemo専用）
+const miraiBinStore = createStore("silentmemo-db", "drafts");
 
 export interface OfflineDraft {
   id: string;

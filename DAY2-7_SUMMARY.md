@@ -198,7 +198,7 @@
 
 **期待結果:**
 - ✅ PWAインストールプロンプトが表示される
-- ✅ ホーム画面に「未来便」アイコンが追加される
+- ✅ ホーム画面に「SilentMemo」アイコンが追加される
 - ✅ PWAを起動すると、ブラウザのUIなしでアプリのように動作する
 - ✅ オフライン時に「オフラインです」ページが表示される
 - ✅ オフライン時に作成した下書きがIndexedDBに保存される
@@ -215,7 +215,7 @@
 **期待結果:**
 - ✅ `/privacy`ページが表示され、プライバシーポリシーの内容が読める
 - ✅ `/terms`ページが表示され、利用規約の内容が読める
-- ✅ 両ページとも「未来便」ヘッダーとフッターが表示される
+- ✅ 両ページとも「SilentMemo」ヘッダーとフッターが表示される
 
 ---
 
@@ -223,7 +223,7 @@
 
 **テスト手順（Vitest）:**
 ```bash
-cd /home/ubuntu/mirai-bin
+cd /home/ubuntu/silentmemo
 pnpm test
 ```
 
@@ -236,7 +236,7 @@ pnpm test
 
 **テスト手順（Playwright E2E）:**
 ```bash
-cd /home/ubuntu/mirai-bin
+cd /home/ubuntu/silentmemo
 npx playwright install chromium
 npx playwright test
 ```

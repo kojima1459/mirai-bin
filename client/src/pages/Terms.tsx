@@ -37,7 +37,7 @@ export default function Terms() {
           <section className="space-y-4">
             <h2 className="text-xl font-bold tracking-tight border-b border-white/10 pb-3">第1条（適用）</h2>
             <p className="text-white/60 leading-relaxed">
-              本規約は、未来便（以下「本サービス」）の利用に関する条件を定めるものです。
+              本規約は、SilentMemo（以下「本サービス」）の利用に関する条件を定めるものです。
               ユーザーは、本規約に同意した上で本サービスを利用するものとします。
             </p>
           </section>
@@ -154,7 +154,7 @@ export default function Terms() {
           <div className="pt-8 text-center">
             <Link href="/">
               <span className="text-xs text-white/30 hover:text-white cursor-pointer transition-colors border-b border-transparent hover:border-white/20 pb-0.5">
-                mirai-bin Top
+                silentmemo Top
               </span>
             </Link>
           </div>

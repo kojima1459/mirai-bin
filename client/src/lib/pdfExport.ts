@@ -27,7 +27,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>未来便 - 共有情報</title>
+    <title>SilentMemo - 共有情報</title>
     <style>
       @media print {
         .page { page-break-after: always; }
@@ -134,7 +134,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
     <!-- ページ1: 共有リンク -->
     <div class="page">
       <div class="header">
-        <h1>未来便 - 共有リンク</h1>
+        <h1>SilentMemo - 共有リンク</h1>
         <div class="subtitle">このページを受取人に渡してください</div>
       </div>
       <div class="content">
@@ -153,7 +153,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
     <!-- ページ2: 解錠コード -->
     <div class="page">
       <div class="header">
-        <h1>未来便 - 解錠コード</h1>
+        <h1>SilentMemo - 解錠コード</h1>
         <div class="subtitle">このページを受取人に渡してください（共有リンクとは別経路で）</div>
       </div>
       <div class="content">
@@ -175,7 +175,7 @@ export function generatePdfHtml(params: PdfExportParams): string {
     <!-- ページ3: バックアップコード -->
     <div class="page">
       <div class="header">
-        <h1>未来便 - バックアップコード</h1>
+        <h1>SilentMemo - バックアップコード</h1>
         <div class="subtitle">【送信者保管用】受取人には渡さないでください</div>
       </div>
       <div class="content">

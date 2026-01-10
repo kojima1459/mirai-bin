@@ -58,7 +58,7 @@ export default function NotFound() {
         <div className="pt-8">
           <Link href="/">
             <span className="text-xs text-white/30 hover:text-white cursor-pointer transition-colors border-b border-transparent hover:border-white/20 pb-0.5">
-              mirai-bin
+              silentmemo
             </span>
           </Link>
         </div>

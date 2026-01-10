@@ -11,7 +11,7 @@ export default function Landing() {
         <div className="min-h-screen bg-[#050505] text-white selection:bg-white/30 selection:text-white font-sans antialiased">
             {/* Minimal Header */}
             <header className="fixed top-0 w-full z-50 mix-blend-difference px-6 py-6 md:px-12 flex justify-between items-center bg-[#050505]/0 backdrop-blur-[2px]">
-                <div className="text-xl font-bold tracking-tighter">mirai-bin</div>
+                <div className="text-xl font-bold tracking-tighter">silentmemo</div>
                 <nav className="flex gap-6 items-center text-sm font-medium">
                     <Link href="/login">
                         <span className="cursor-pointer hover:opacity-70 transition-opacity">Login</span>

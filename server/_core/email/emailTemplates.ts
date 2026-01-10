@@ -20,7 +20,7 @@ export interface VerificationEmailParams {
 }
 
 export function buildVerificationEmailSubject(): string {
-  return "【未来便】メールアドレスの確認";
+  return "【SilentMemo】メールアドレスの確認";
 }
 
 export function buildVerificationEmailHtml(params: VerificationEmailParams): string {
@@ -65,7 +65,7 @@ export function buildVerificationEmailHtml(params: VerificationEmailParams): str
   <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
 
   <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
-    このメールは未来便からの自動送信です。<br>
+    このメールはSilentMemoからの自動送信です。<br>
     心当たりがない場合は、このメールを無視してください。
   </p>
 </body>
@@ -77,7 +77,7 @@ export function buildVerificationEmailText(params: VerificationEmailParams): str
   const verifyUrl = makeVerifyEmailUrl(params.token);
 
   return `
-【未来便】メールアドレスの確認
+【SilentMemo】メールアドレスの確認
 
 以下のURLにアクセスして、通知先メールの設定を完了してください。
 
@@ -86,7 +86,7 @@ ${verifyUrl}
 ※ このリンクは24時間で有効期限が切れます。
 
 ---
-このメールは未来便からの自動送信です。
+このメールはSilentMemoからの自動送信です。
 心当たりがない場合は、このメールを無視してください。
   `.trim();
 }
@@ -102,7 +102,7 @@ export interface OpenNotificationEmailParams {
 }
 
 export function buildOpenNotificationSubject(): string {
-  return "【未来便】手紙が開封されました";
+  return "【SilentMemo】手紙が開封されました";
 }
 
 export function buildOpenNotificationHtml(params: OpenNotificationEmailParams): string {
@@ -158,7 +158,7 @@ export function buildOpenNotificationHtml(params: OpenNotificationEmailParams): 
   <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
 
   <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
-    このメールは未来便からの自動送信です。
+    このメールはSilentMemoからの自動送信です。
   </p>
 </body>
 </html>
@@ -178,7 +178,7 @@ export function buildOpenNotificationText(params: OpenNotificationEmailParams): 
   });
 
   return `
-【未来便】手紙が開封されました
+【SilentMemo】手紙が開封されました
 
 「${recipientLabel}」への手紙が読まれました。
 
@@ -191,6 +191,6 @@ ${letterManagementUrl}
 ※ ゼロ知識設計のため、運営者も手紙の内容を読むことはできません。
 
 ---
-このメールは未来便からの自動送信です。
+このメールはSilentMemoからの自動送信です。
   `.trim();
 }

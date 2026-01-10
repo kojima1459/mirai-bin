@@ -22,9 +22,9 @@ export interface ReminderEmailParams {
  */
 export function buildReminderSubject(daysBefore: number): string {
   if (daysBefore === 1) {
-    return "【未来便】明日が開封日です";
+    return "【SilentMemo】明日が開封日です";
   }
-  return `【未来便】開封日が近づいています（あと${daysBefore}日）`;
+  return `【SilentMemo】開封日が近づいています（あと${daysBefore}日）`;
 }
 
 /**
@@ -91,7 +91,7 @@ export function buildReminderBodyHtml(params: ReminderEmailParams): string {
   <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 24px 0;">
 
   <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
-    このメールは未来便からの自動送信です。<br>
+    このメールはSilentMemoからの自動送信です。<br>
     リマインダー設定は<a href="${letterManagementUrl}" style="color: #D97706;">マイレター</a>から変更できます。
   </p>
 </body>
@@ -117,7 +117,7 @@ export function buildReminderBodyText(params: ReminderEmailParams): string {
   const daysText = daysBefore === 1 ? "明日" : `あと${daysBefore}日`;
 
   return `
-【未来便】開封日が近づいています
+【SilentMemo】開封日が近づいています
 
 「${recipientLabel}」への手紙は${daysText}で開封日を迎えます。
 
@@ -133,7 +133,7 @@ ${letterManagementUrl}
 ※ログインが必要です
 
 ---
-このメールは未来便からの自動送信です。
+このメールはSilentMemoからの自動送信です。
 リマインダー設定はマイレターから変更できます。
   `.trim();
 }

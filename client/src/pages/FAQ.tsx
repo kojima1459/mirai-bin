@@ -61,8 +61,8 @@ export default function FAQ() {
     {
       category: "基本的な使い方",
       questions: [
-        { q: "未来便とは何ですか？", a: "未来便は、大切な人への想いを「未来の特別な日」に届けるサービスです。音声で想いを録音し、AIが心のこもった手紙に仕上げ、暗号化して安全に保管します。" },
-        { q: "手紙を書くのに費用はかかりますか？", a: "現在、未来便は無料でご利用いただけます。将来的に有料プランを導入する可能性がありますが、既存の手紙には影響しません。" },
+        { q: "SilentMemoとは何ですか？", a: "SilentMemoは、大切な人への想いを「未来の特別な日」に届けるサービスです。音声で想いを録音し、AIが心のこもった手紙に仕上げ、暗号化して安全に保管します。" },
+        { q: "手紙を書くのに費用はかかりますか？", a: "現在、SilentMemoは無料でご利用いただけます。将来的に有料プランを導入する可能性がありますが、既存の手紙には影響しません。" },
         { q: "何通まで手紙を書けますか？", a: "現在、手紙の数に制限はありません。ただし、サービスの安定運用のため、将来的に制限を設ける可能性があります。" },
         { q: "音声録音は必須ですか？", a: "はい、現在は音声録音から手紙を作成する方式のみ対応しています。90秒以内で想いを話していただき、AIが手紙に仕上げます。" }
       ]
@@ -138,7 +138,7 @@ export default function FAQ() {
           <div className="text-center mb-12">
             <span className="text-xs font-semibold tracking-[0.2em] text-white/40 uppercase block mb-4">FAQ</span>
             <h1 className="text-4xl font-bold tracking-tighter mb-4">注意点・よくある質問</h1>
-            <p className="text-white/50">未来便をご利用いただく前に、必ずお読みください。</p>
+            <p className="text-white/50">SilentMemoをご利用いただく前に、必ずお読みください。</p>
           </div>
 
           {/* Warnings */}

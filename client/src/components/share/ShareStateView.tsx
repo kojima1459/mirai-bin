@@ -13,7 +13,7 @@ interface ShareStateViewProps {
 
 export function ShareStateView({ state, unlockAt, onRetry }: ShareStateViewProps) {
     const handleContactSender = () => {
-        const message = `未来便のリンクが開けません（エラー: ${state}）。新しいリンクを送ってください。`;
+        const message = `SilentMemoのリンクが開けません（エラー: ${state}）。新しいリンクを送ってください。`;
         navigator.clipboard.writeText(message).then(() => {
             toast.success("メッセージをコピーしました", { description: "送信者に連絡する際にお使いください" });
         }).catch(() => {
@@ -178,7 +178,7 @@ export function ShareStateView({ state, unlockAt, onRetry }: ShareStateViewProps
                     >
                         <Link href="/">
                             <span className="text-xs text-white/30 hover:text-white cursor-pointer transition-colors border-b border-transparent hover:border-white/20 pb-0.5">
-                                mirai-bin Top
+                                silentmemo Top
                             </span>
                         </Link>
                     </motion.div>

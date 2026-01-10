@@ -1,4 +1,4 @@
-# 未来便 ロードマップ（GitHubより）
+# SilentMemo ロードマップ（GitHubより）
 
 ## Day 2: UI/UX磨き
 - ホーム画面のアニメーション

@@ -74,7 +74,7 @@ export default function Drafts() {
       <header className="fixed top-0 w-full z-50 px-6 py-5 flex justify-between items-center border-b border-white/5 bg-[#050505]/80 backdrop-blur-md">
         <div className="flex items-center gap-4">
           <Link href="/">
-            <div className="text-xl font-bold tracking-tighter cursor-pointer">mirai-bin</div>
+            <div className="text-xl font-bold tracking-tighter cursor-pointer">silentmemo</div>
           </Link>
         </div>
         <nav className="flex gap-6 items-center text-sm font-medium">
